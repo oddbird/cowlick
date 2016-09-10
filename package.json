@@ -1,0 +1,31 @@
+{
+  "name": "jaxe",
+  "version": "0.0.1",
+  "description": "Jinja-style template language with DOM output",
+  "main": "index.js",
+  "dependencies": {
+    "pegjs": "^0.10.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "mocha -- -R dot tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oddbird/jaxe.git"
+  },
+  "keywords": [
+    "jinja",
+    "jinja2",
+    "nunjucks",
+    "template",
+    "react",
+    "dom"
+  ],
+  "author": "OddBird",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/oddbird/jaxe/issues"
+  },
+  "homepage": "https://github.com/oddbird/jaxe#readme"
+}
