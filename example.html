@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Hello React!</title>
+    <script src="https://npmcdn.com/react@15.3.1/dist/react-with-addons.js"></script>
+    <script src="https://npmcdn.com/react-dom@15.3.1/dist/react-dom.js"></script>
+    <script src="https://github.com/pegjs/pegjs/releases/download/v0.10.0/peg-0.10.0.js"></script>
+    <script id="grammar" type="text/pegjs">
+document
+    = (doctype / text / tag)*
+tag
+    = tag:open_tag children:(text / tag)* close_tag {
+      return {
+        tag: tag.name,
+        attrs: tag.attrs,
+        children
+      };
+    }
+open_tag
+  = '<' name:name attrs:(attribute)* '>' {
+    return {
+      name,
+      attrs
+    };
+  }
+close_tag
+  = '</' name '>'
+doctype
+  = '<!doctype'i name '>'
+text
+  = text:[^<]+ {
+    return text.join('');
+  }
+attribute
+    = _ name:name value:('=' value)? {
+      return {
+        name,
+        value: value ? value[1] : true
+      };
+    }
+name
+  = name:[A-Za-z0-9-]+ {
+    return name.join('');
+  }
+value
+    = '"' value:[^"]+ '"' {
+      return value.join('');
+    }
+    / "'" value:[^']+ "'" {
+      return value.join('');
+    }
+    / value:[^<> ]+ {
+      return value.join('');
+    }
+ 
+ _
+   = [\n ]+ { }
+    </script>
+    <script type="text/plain" id="example">
+      <a href="http://oddbird.net">OddBird</a>
+    </script>
+  </head>
+  <body>
+    <div id="output"></div>
+    <script>
+      function treeToReact (node) {
+      	if (typeof node === 'string') {
+      		return node;
+      	} else {
+      		var attrs = {};
+      		node.attrs.forEach((attr) => {
+      			attrs[attr.name] = attr.value;
+      		});
+      		return React.createElement(
+      			node.tag,
+      			attrs,
+      			node.children.map(treeToReact)
+      		);
+      	}
+      };
+
+      const grammar = document.getElementById('grammar').text;
+      const parser = peg.generate(grammar);
+
+      class Template {
+      	constructor (s) {
+      		this.runtime = this.compile(s);
+      	}
+
+      	compile (s) {
+      		const tree = parser.parse(s);
+      		return (context) => {
+      			return React.createElement(
+      				'div',
+     				null,
+      				tree.map(treeToReact)
+      			);
+      		}
+      	}
+
+      	render (context) {
+      		var result = this.runtime(context);
+      		console.log(result);
+      		return result;
+      	}
+      }
+
+      const tplStr = document.getElementById('example').text;
+      var tpl = new Template(tplStr);
+      ReactDOM.render(
+        tpl.render(),
+        document.getElementById('output')
+      );
+    </script>
+  </body>
+</html>
