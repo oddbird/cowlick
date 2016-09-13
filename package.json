@@ -1,5 +1,5 @@
 {
-  "name": "jaxe",
+  "name": "cowlick",
   "version": "0.0.1",
   "description": "Jinja-style template language with DOM output",
   "main": "src/index.js",
@@ -26,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oddbird/jaxe.git"
+    "url": "git+https://github.com/oddbird/cowlick.git"
   },
   "keywords": [
     "jinja",
@@ -39,7 +39,7 @@
   "author": "OddBird",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/oddbird/jaxe/issues"
+    "url": "https://github.com/oddbird/cowlick/issues"
   },
-  "homepage": "https://github.com/oddbird/jaxe#readme"
+  "homepage": "https://github.com/oddbird/cowlick#readme"
 }
