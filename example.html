@@ -93,20 +93,20 @@ variable
         constructor () {
           this.out = [];
           this.emitLine('(function fn (context) {');
-          this.emitLine('var stack = [];');
-          this.emitLine('var children = [];');
-          this.emitLine('var node;');
+          this.emitLine('var nodes = [];')
+          this.emitLine('var stack = [nodes];');
+          this.emitLine('var children;');
         }
 
         emitLine (code) {
           this.out.push(code + '\n');
         }
 
-        compileNode(node) {
+        compileNode(node, key) {
           if (typeof node === 'string') {
-            this.emitLine('node = "' + escapeLiteral(node) + '";');
+            this.emitLine('nodes.push("' + escapeLiteral(node) + '");');
           } else if (node.type === 'variable') {
-            this.emitLine('node = context["' + node.name + '"];');
+            this.emitLine('nodes.push(context["' + node.name + '"]);');
           } else {
             const attrs = {};
             node.attrs.forEach((attr) => {
@@ -115,24 +115,26 @@ variable
               if (name == 'for') name = 'htmlFor';
               attrs[name] = attr.value;
             });
+            if (key !== undefined) {
+              attrs.key = key;
+            }
             if (node.children.length) {
-              node.children.forEach((child) => {
-                this.emitLine('stack.push(children); children = [];');
-                this.compileNode(child);
-                this.emitLine('children = stack.pop();');
-                this.emitLine('children.push(node);');
+              this.emitLine('stack.push(nodes); nodes = [];');
+              node.children.forEach((child, i) => {
+                this.compileNode(child, i);
               });
-              this.emitLine('node = React.createElement("' +
-                node.tag + '", ' + JSON.stringify(attrs) + ', children);');
+              this.emitLine('children = nodes; nodes = stack.pop();');
+              this.emitLine('nodes.push(React.createElement("' +
+                node.tag + '", ' + JSON.stringify(attrs) + ', children));');
             } else {
-              this.emitLine('node = React.createElement("' +
-                node.tag + '", ' + JSON.stringify(attrs) + ', []);');
+              this.emitLine('nodes.push(React.createElement("' +
+                node.tag + '", ' + JSON.stringify(attrs) + ', []));');
             }
           }
         }
 
         getCode () {
-          this.emitLine('return node;');
+          this.emitLine('return nodes[0];');
           this.emitLine('})');
           return this.out.join('');
         }
