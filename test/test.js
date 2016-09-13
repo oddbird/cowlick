@@ -8,11 +8,11 @@ describe('index.js', function () {
 
   it('returns a string of parsed html', function (done) {
     fs.readFile(
-      './test/templates/example.html',
+      './test/templates/example_expected.html',
       'utf8',
       function (err, data) {
         if (err) { throw err; }
-        assert(result.includes(data));
+        assert(data.includes(result));
         done(err);
       });
   });

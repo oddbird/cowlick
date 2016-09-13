@@ -1,13 +1,17 @@
 document
-    = (doctype / text / tag)*
+  = ws? doctype? root:tag ws? {
+    return root;
+  }
+
 tag
-    = tag:open_tag children:(text / tag)* close_tag {
-      return {
-        tag: tag.name,
-        attrs: tag.attrs,
-        children
-      };
-    }
+  = tag:open_tag children:(text / curly / tag)* close_tag {
+    return {
+      tag: tag.name,
+      attrs: tag.attrs,
+      children
+    };
+  }
+
 open_tag
   = '<' name:name attrs:(attribute)* '>' {
     return {
@@ -15,35 +19,59 @@ open_tag
       attrs
     };
   }
+
 close_tag
   = '</' name '>'
+
 doctype
   = '<!doctype'i name '>'
+
 text
-  = text:[^<]+ {
+  = text:[^<{]+ {
     return text.join('');
   }
-attribute
-    = _ name:name value:('=' value)? {
-      return {
-        name,
-        value: value ? value[1] : true
-      };
-    }
-name
-  = name:[A-Za-z0-9-]+ {
-    return name.join('');
-  }
-value
-    = '"' value:[^"]+ '"' {
-      return value.join('');
-    }
-    / "'" value:[^']+ "'" {
-      return value.join('');
-    }
-    / value:[^<> ]+ {
-      return value.join('');
-    }
 
-_
-  = [\n ]+ { }
+attribute
+  = ws name:name value:('=' value)? {
+    return {
+      name,
+      value: value ? value[1] : true
+    };
+  }
+
+name
+  = name:([A-Za-z][A-Za-z0-9-]*) {
+    return name[0] + name[1].join('');
+  }
+
+identifier
+  = name:([a-zA-Z_][a-zA-Z0-9_]*) {
+    return name[0] + name[1].join('');
+  }
+
+value
+  = '"' value:[^"]+ '"' {
+    return value.join('');
+  }
+  / "'" value:[^']+ "'" {
+    return value.join('');
+  }
+  / value:[^<> ]+ {
+    return value.join('');
+  }
+
+ws
+  = [\n ]+
+
+curly
+  = '{' inner:(variable / text) '}' {
+    return (inner.type === 'variable') ? inner : '{' + inner + '}'
+  }
+
+variable
+  = '{' ws? name:identifier ws? '}' {
+    return {
+      type: 'variable',
+      name
+    }
+  }
