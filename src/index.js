@@ -20,76 +20,47 @@ function escapeLiteral(s) {
   return s;
 }
 
-class Compiler {
-  constructor () {
-    this.out = [];
-    this.emitLine('(function fn (context) {');
-    this.emitLine('var nodes = [];');
-    this.emitLine('var stack = [nodes];');
-    this.emitLine('var children;');
-  }
+function attrsArrayToObj (attrs) {
+  // TODO handle variables in attrs.
+  const ret = {};
+  attrs.forEach((attr) => {
+    let name = attr.name;
+    if (name === 'class') name = 'className';
+    if (name === 'for') name = 'htmlFor';
+    ret[name] = attr.value;
+  });
+  return ret;
+}
 
-  emitLine (code) {
-    this.out.push(code + '\n');
-  }
+function compile (rootNode) {
+  return `(function fn (context) { return `
+      + `React.createElement("${ rootNode.tag }", `
+      + `${ JSON.stringify(attrsArrayToObj(rootNode.attrs)) }, `
+      + `[${ rootNode.children.map((node) => _inner(node)).join(',') }])`
+      + `})`;
+}
 
-  compileNode(node, key) {
-    if (typeof node === 'string') {
-      this.emitLine('nodes.push("' + escapeLiteral(node) + '");');
-    } else if (node.type === 'variable') {
-      this.emitLine('nodes.push(context["' + node.name + '"]);');
-    } else {
-      const attrs = {};
-      node.attrs.forEach((attr) => {
-        var name = attr.name;
-        if (name == 'class') name = 'className';
-        if (name == 'for') name = 'htmlFor';
-        attrs[name] = attr.value;
-      });
-      if (key !== undefined) {
-        attrs.key = key;
-      }
-      if (node.children.length) {
-        this.emitLine('stack.push(nodes); nodes = [];');
-        node.children.forEach((child, i) => {
-          this.compileNode(child, i);
-        });
-        this.emitLine('children = nodes; nodes = stack.pop();');
-        this.emitLine('nodes.push(React.createElement("' +
-          node.tag + '", ' + JSON.stringify(attrs) + ', children));');
-      } else {
-        this.emitLine('node = React.createElement("' +
-          node.tag + '", ' + JSON.stringify(attrs) + ', []);');
-      }
-    }
+function _inner (node) {
+  if (typeof node === 'string') {
+    return `"${ node }"`;  // TODO escape this.
   }
-
-  getCode () {
-    this.emitLine('return nodes[0];');
-    this.emitLine('})');
-    return this.out.join('');
+  if (node.type === 'variable') {
+    return `context['${ node.name }']`;  // TODO escape this.
   }
+  return `React.createElement("${ node.tag }", `
+    + `${ JSON.stringify(attrsArrayToObj(node.attrs)) }, `
+    + `[${ node.children.map((child) => _inner(child) )}])`;
 }
 
 class Template {
   constructor (s) {
     const tree = parser.parse(s);
-    const code = this.compile(tree);
+    const code = compile(tree);
     this.compiled = eval(code);
   }
 
-  compile (tree) {
-    const compiler = new Compiler();
-    compiler.compileNode(tree);
-    const result = compiler.getCode();
-    console.log(result);
-    return result;
-  }
-
   render (context) {
-    const result = this.compiled(context);
-    console.log(result);
-    return result;
+    return this.compiled(context);
   }
 }
 
