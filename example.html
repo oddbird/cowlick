@@ -8,9 +8,11 @@
     <script src="https://github.com/pegjs/pegjs/releases/download/v0.10.0/peg-0.10.0.js"></script>
     <script id="grammar" type="text/pegjs">
 document
-    = (doctype / text / tag)*
+    = ws? doctype? root:tag ws? {
+      return root;
+    }
 tag
-    = tag:open_tag children:(text / tag)* close_tag {
+    = tag:open_tag children:(text / curly / tag)* close_tag {
       return {
         tag: tag.name,
         attrs: tag.attrs,
@@ -29,19 +31,23 @@ close_tag
 doctype
   = '<!doctype'i name '>'
 text
-  = text:[^<]+ {
+  = text:[^<{]+ {
     return text.join('');
   }
 attribute
-    = _ name:name value:('=' value)? {
+    = ws name:name value:('=' value)? {
       return {
         name,
         value: value ? value[1] : true
       };
     }
 name
-  = name:[A-Za-z0-9-]+ {
-    return name.join('');
+  = name:([A-Za-z][A-Za-z0-9-]*) {
+    return name[0] + name[1].join('');
+  }
+identifier
+  = name:([a-zA-Z_][a-zA-Z0-9_]*) {
+    return name[0] + name[1].join('');
   }
 value
     = '"' value:[^"]+ '"' {
@@ -53,63 +59,114 @@ value
     / value:[^<> ]+ {
       return value.join('');
     }
- 
- _
-   = [\n ]+ { }
+ws
+    = [\n ]+ { }
+curly
+  = '{' inner:(variable / text) '}' {
+    return (inner.type === 'variable') ? inner : '{' + inner + '}'
+  }
+variable
+  = '{' ws? name:identifier ws? '}' {
+    return {
+      type: 'variable',
+      name
+    }
+  }
     </script>
     <script type="text/plain" id="example">
-      <a href="http://oddbird.net">OddBird</a>
+      <div class="foo"><a href="http://oddbird.net">Hello, {{org}}!</a> there</div>
     </script>
   </head>
   <body>
     <div id="output"></div>
     <script>
-      function treeToReact (node) {
-      	if (typeof node === 'string') {
-      		return node;
-      	} else {
-      		var attrs = {};
-      		node.attrs.forEach((attr) => {
-      			attrs[attr.name] = attr.value;
-      		});
-      		return React.createElement(
-      			node.tag,
-      			attrs,
-      			node.children.map(treeToReact)
-      		);
-      	}
-      };
+      function escapeLiteral(s) {
+        s = s.replace(/\\/g, '\\\\');
+        s = s.replace(/"/g, '\\"');
+        s = s.replace(/\n/g, '\\n');
+        s = s.replace(/\r/g, '\\r');
+        s = s.replace(/\t/g, '\\t');
+        return s;
+      }
+
+      class Compiler {
+        constructor () {
+          this.out = [];
+          this.emitLine('(function fn (context) {');
+          this.emitLine('var stack = [];');
+          this.emitLine('var children = [];');
+          this.emitLine('var node;');
+        }
+
+        emitLine (code) {
+          this.out.push(code + '\n');
+        }
+
+        compileNode(node) {
+          if (typeof node === 'string') {
+            this.emitLine('node = "' + escapeLiteral(node) + '";');
+          } else if (node.type === 'variable') {
+            this.emitLine('node = context["' + node.name + '"];');
+          } else {
+            const attrs = {};
+            node.attrs.forEach((attr) => {
+              var name = attr.name;
+              if (name == 'class') name = 'className';
+              if (name == 'for') name = 'htmlFor';
+              attrs[name] = attr.value;
+            });
+            if (node.children.length) {
+              node.children.forEach((child) => {
+                this.emitLine('stack.push(children); children = [];');
+                this.compileNode(child);
+                this.emitLine('children = stack.pop();');
+                this.emitLine('children.push(node);');
+              });
+              this.emitLine('node = React.createElement("' +
+                node.tag + '", ' + JSON.stringify(attrs) + ', children);');
+            } else {
+              this.emitLine('node = React.createElement("' +
+                node.tag + '", ' + JSON.stringify(attrs) + ', []);');
+            }
+          }
+        }
+
+        getCode () {
+          this.emitLine('return node;');
+          this.emitLine('})');
+          return this.out.join('');
+        }
+      }
 
       const grammar = document.getElementById('grammar').text;
       const parser = peg.generate(grammar);
 
       class Template {
-      	constructor (s) {
-      		this.runtime = this.compile(s);
-      	}
+        constructor (s) {
+          const tree = parser.parse(s);
+          const code = this.compile(tree);
+          this.compiled = eval(code);
+        }
 
-      	compile (s) {
-      		const tree = parser.parse(s);
-      		return (context) => {
-      			return React.createElement(
-      				'div',
-     				null,
-      				tree.map(treeToReact)
-      			);
-      		}
-      	}
+        compile (tree) {
+          const compiler = new Compiler();
+          compiler.compileNode(tree);
+          const result = compiler.getCode();
+          console.log(result);
+          return result;
+        }
 
-      	render (context) {
-      		var result = this.runtime(context);
-      		console.log(result);
-      		return result;
-      	}
+        render (context) {
+          const result = this.compiled(context);
+          console.log(result);
+          return result;
+        }
       }
 
       const tplStr = document.getElementById('example').text;
       var tpl = new Template(tplStr);
       ReactDOM.render(
-        tpl.render(),
+        tpl.render({org: 'OddBird'}),
         document.getElementById('output')
       );
     </script>
