@@ -48,8 +48,8 @@ var Compiler = function () {
         this.emitLine('nodes.push(React.createElement("' +
           node.tag + '", ' + JSON.stringify(attrs) + ', children));');
       } else {
-        this.emitLine('node = React.createElement("' +
-          node.tag + '", ' + JSON.stringify(attrs) + ', []);');
+        this.emitLine('nodes.push(React.createElement("' +
+          node.tag + '", ' + JSON.stringify(attrs) + ', []));');
       }
     }
   };
