@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 'use strict';
 
 var fs = require('fs');
@@ -73,13 +71,11 @@ var Template = function (str) {
     var compiler = new Compiler();
     compiler.compileNode(tree);
     var result = compiler.getCode();
-    console.log(result);
     return result;
   };
 
   this.render = function (context) {
     var result = this.compiled(context);
-    console.log(result);
     return result;
   };
 

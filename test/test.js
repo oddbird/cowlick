@@ -26,8 +26,8 @@ async.each(testCases, function (filename, cb) {
             context = {};
             expected = parts[1];
           } else {
-            throw 'Expected input/output or input/context/output;' +
-              ' found ' + parts.length + 'parts.';
+            throw new Error('Expected input/output or input/context/output;' +
+              ' found ' + parts.length + 'parts.');
           }
 
           var tree = new cowlick.Template(input).render(context);
