@@ -5,11 +5,9 @@
 var fs = require('fs');
 var peg = require('pegjs');
 var React = require('react'); // eslint-disable-line no-unused-vars
-var ReactDOMServer = require('react-dom/server');
 
 var grammar = fs.readFileSync('./src/grammar.txt', 'utf8');
 var parser = peg.generate(grammar);
-var tplStr = fs.readFileSync('./test/templates/example.html', 'utf8');
 
 var escapeLiteral = function (str) {
   str = str.replace(/\\/g, '\\\\');
@@ -90,9 +88,4 @@ var Template = function (str) {
   this.compiled = eval(code); // eslint-disable-line no-eval
 };
 
-var tpl = new Template(tplStr);
-var result = ReactDOMServer.renderToStaticMarkup(tpl.render({
-  org: 'OddBird'
-}));
-
-module.exports = result;
+module.exports.Template = Template;
