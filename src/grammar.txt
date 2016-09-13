@@ -1,0 +1,49 @@
+document
+    = (doctype / text / tag)*
+tag
+    = tag:open_tag children:(text / tag)* close_tag {
+      return {
+        tag: tag.name,
+        attrs: tag.attrs,
+        children
+      };
+    }
+open_tag
+  = '<' name:name attrs:(attribute)* '>' {
+    return {
+      name,
+      attrs
+    };
+  }
+close_tag
+  = '</' name '>'
+doctype
+  = '<!doctype'i name '>'
+text
+  = text:[^<]+ {
+    return text.join('');
+  }
+attribute
+    = _ name:name value:('=' value)? {
+      return {
+        name,
+        value: value ? value[1] : true
+      };
+    }
+name
+  = name:[A-Za-z0-9-]+ {
+    return name.join('');
+  }
+value
+    = '"' value:[^"]+ '"' {
+      return value.join('');
+    }
+    / "'" value:[^']+ "'" {
+      return value.join('');
+    }
+    / value:[^<> ]+ {
+      return value.join('');
+    }
+
+_
+  = [\n ]+ { }
