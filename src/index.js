@@ -4,46 +4,40 @@
 
 var fs = require('fs');
 var peg = require('pegjs');
-var React = require('react');
+var React = require('react'); // eslint-disable-line no-unused-vars
 var ReactDOMServer = require('react-dom/server');
 
 var grammar = fs.readFileSync('./src/grammar.txt', 'utf8');
 var parser = peg.generate(grammar);
 var tplStr = fs.readFileSync('./test/templates/example.html', 'utf8');
 
-function escapeLiteral(s) {
-  s = s.replace(/\\/g, '\\\\');
-  s = s.replace(/"/g, '\\"');
-  s = s.replace(/\n/g, '\\n');
-  s = s.replace(/\r/g, '\\r');
-  s = s.replace(/\t/g, '\\t');
-  return s;
-}
+var escapeLiteral = function (str) {
+  str = str.replace(/\\/g, '\\\\');
+  str = str.replace(/"/g, '\\"');
+  str = str.replace(/\n/g, '\\n');
+  str = str.replace(/\r/g, '\\r');
+  str = str.replace(/\t/g, '\\t');
+  return str;
+};
 
-class Compiler {
-  constructor () {
-    this.out = [];
-    this.emitLine('(function fn (context) {');
-    this.emitLine('var nodes = [];');
-    this.emitLine('var stack = [nodes];');
-    this.emitLine('var children;');
-  }
+var Compiler = function () {
+  this.out = [];
 
-  emitLine (code) {
+  this.emitLine = function (code) {
     this.out.push(code + '\n');
-  }
+  };
 
-  compileNode(node, key) {
+  this.compileNode = function (node, key) {
     if (typeof node === 'string') {
       this.emitLine('nodes.push("' + escapeLiteral(node) + '");');
     } else if (node.type === 'variable') {
       this.emitLine('nodes.push(context["' + node.name + '"]);');
     } else {
-      const attrs = {};
-      node.attrs.forEach((attr) => {
+      var attrs = {};
+      node.attrs.forEach(function (attr) {
         var name = attr.name;
-        if (name == 'class') name = 'className';
-        if (name == 'for') name = 'htmlFor';
+        if (name === 'class') { name = 'className'; }
+        if (name === 'for') { name = 'htmlFor'; }
         attrs[name] = attr.value;
       });
       if (key !== undefined) {
@@ -51,9 +45,9 @@ class Compiler {
       }
       if (node.children.length) {
         this.emitLine('stack.push(nodes); nodes = [];');
-        node.children.forEach((child, i) => {
+        node.children.forEach(function (child, i) {
           this.compileNode(child, i);
-        });
+        }.bind(this));
         this.emitLine('children = nodes; nodes = stack.pop();');
         this.emitLine('nodes.push(React.createElement("' +
           node.tag + '", ' + JSON.stringify(attrs) + ', children));');
@@ -62,40 +56,43 @@ class Compiler {
           node.tag + '", ' + JSON.stringify(attrs) + ', []);');
       }
     }
-  }
+  };
 
-  getCode () {
+  this.getCode = function () {
     this.emitLine('return nodes[0];');
     this.emitLine('})');
     return this.out.join('');
-  }
-}
+  };
 
-class Template {
-  constructor (s) {
-    const tree = parser.parse(s);
-    const code = this.compile(tree);
-    this.compiled = eval(code);
-  }
+  this.emitLine('(function fn (context) {');
+  this.emitLine('var nodes = [];');
+  this.emitLine('var stack = [nodes];');
+  this.emitLine('var children;');
+};
 
-  compile (tree) {
-    const compiler = new Compiler();
+var Template = function (str) {
+  this.compile = function (tree) {
+    var compiler = new Compiler();
     compiler.compileNode(tree);
-    const result = compiler.getCode();
+    var result = compiler.getCode();
     console.log(result);
     return result;
-  }
+  };
 
-  render (context) {
-    const result = this.compiled(context);
+  this.render = function (context) {
+    var result = this.compiled(context);
     console.log(result);
     return result;
-  }
-}
+  };
+
+  var parsed = parser.parse(str);
+  var code = this.compile(parsed);
+  this.compiled = eval(code); // eslint-disable-line no-eval
+};
 
 var tpl = new Template(tplStr);
 var result = ReactDOMServer.renderToStaticMarkup(tpl.render({
-  'org': 'OddBird'
+  org: 'OddBird'
 }));
 
 module.exports = result;
