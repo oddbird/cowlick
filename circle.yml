@@ -1,0 +1,10 @@
+dependencies:
+  override:
+    - npm install
+
+test:
+  override:
+    - nvm use 4.0.0 && npm test
+    - nvm use 6.5.0 && npm test
+    - gulp eslint
+    - ./node_modules/.bin/istanbul check-coverage --root coverage/ --statements=100 --functions=100 --branches=100 --lines=100

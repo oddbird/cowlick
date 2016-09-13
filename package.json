@@ -20,7 +20,7 @@
     "mocha": "^3.0.2"
   },
   "scripts": {
-    "test": "mocha -- -R dot tests",
+    "test": "gulp test",
     "start": "node src/index.js"
   },
   "engines": {

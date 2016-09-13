@@ -63,7 +63,7 @@ gulp.task('eslint-nofail', function () {
 
 gulp.task('pre-test', function () {
   return gulp.src(paths.SRC_DIR + '**/*.js')
-    .pipe(istanbul())
+    .pipe(istanbul({ includeUntested: true }))
     .pipe(istanbul.hookRequire());
 });
 
