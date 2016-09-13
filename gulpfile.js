@@ -5,6 +5,7 @@ var eslint = require('gulp-eslint');
 var exec = require('child_process').exec;
 var gulp = require('gulp');
 var gutil = require('gulp-util');
+var istanbul = require('gulp-istanbul');
 var mocha = require('gulp-mocha');
 
 var paths = {
@@ -60,9 +61,16 @@ gulp.task('eslint-nofail', function () {
   return eslintTask(paths.ALL_JS);
 });
 
-gulp.task('test', function () {
-  return gulp.src(paths.TESTS_DIR + '**/*.js', { read: false })
-    .pipe(mocha());
+gulp.task('pre-test', function () {
+  return gulp.src(paths.SRC_DIR + '**/*.js')
+    .pipe(istanbul())
+    .pipe(istanbul.hookRequire());
+});
+
+gulp.task('test', ['pre-test'], function () {
+  return gulp.src(paths.TESTS_DIR + '**/*.js')
+    .pipe(mocha())
+    .pipe(istanbul.writeReports());
 });
 
 gulp.task('default', [

@@ -13,8 +13,10 @@
     "eslint": "^3.5.0",
     "gulp": "^3.9.1",
     "gulp-eslint": "^3.0.1",
+    "gulp-istanbul": "^1.1.1",
     "gulp-mocha": "^3.0.1",
     "gutil": "^1.6.4",
+    "istanbul": "^0.4.5",
     "mocha": "^3.0.2"
   },
   "scripts": {
