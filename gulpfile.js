@@ -2,7 +2,6 @@
 
 var chalk = require('chalk');
 var eslint = require('gulp-eslint');
-var exec = require('child_process').exec;
 var gulp = require('gulp');
 var gutil = require('gulp-util');
 var istanbul = require('gulp-istanbul');
@@ -11,7 +10,6 @@ var mocha = require('gulp-mocha');
 var paths = {
   TESTS_DIR: 'test/',
   SRC_DIR: 'src/',
-  TEMPLATES_DIR: 'templates/',
   IGNORE: [
     '!**/.#*',
     '!**/flycheck_*'
@@ -22,12 +20,9 @@ var paths = {
       this.TESTS_DIR + '**/*.js',
       '*.js'
     ].concat(this.IGNORE);
-    this.SRC = [
-      this.SRC_DIR + '**/*',
-      this.TEMPLATES_DIR + '**/*.html'
-    ].concat(this.IGNORE);
     this.TESTS_FILES = [
-      this.TESTS_DIR + '**/*.js'
+      this.SRC_DIR + '**/*',
+      this.TESTS_DIR + '**/*'
     ].concat(this.IGNORE);
     return this;
   }
@@ -75,8 +70,7 @@ gulp.task('test', ['pre-test'], function () {
 
 gulp.task('default', [
   'eslint',
-  'test',
-  'compile'
+  'test'
 ]);
 
 // Development task.
@@ -86,8 +80,6 @@ gulp.task('develop', [
 ], function () {
   gulp.watch(paths.TESTS_FILES, ['test']);
 
-  gulp.watch(paths.SRC, ['compile']);
-
   gulp.watch(paths.ALL_JS, function (ev) {
     if (ev.type === 'added' || ev.type === 'changed') {
       eslintTask(ev.path, false, true);
@@ -95,12 +87,4 @@ gulp.task('develop', [
   });
 
   gulp.watch('**/.eslintrc.yml', ['eslint-nofail']);
-});
-
-gulp.task('compile', function (cb) {
-  exec('npm start', function (err, stdout, stderr) {
-    gutil.log(stdout);
-    gutil.log(stderr);
-    cb(err);
-  });
 });
