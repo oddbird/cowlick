@@ -5,9 +5,9 @@ Cow parser
 
 {% if foo %}
   <div>
-    <% if bar %>
+    {% if bar %}
       <a data-baz="{{ "}}" }}">asdf</p>
-    <% endif %>
+    {% endif %}
   </div>
 {% endif %}
 
@@ -87,7 +87,7 @@ var TreeAdapter = function (tpltags) {
   this.createElement = function (tagName, namespaceURI, attrs) {
     attrs.forEach(function (attr) {
       attr.value = this.uncowify(attr.value);
-    }.bind(this));
+    }, this);
     return {
       node: 'tag',
       tag: tagName,
@@ -112,7 +112,7 @@ var TreeAdapter = function (tpltags) {
     var nodes = this.uncowify(text);
     nodes.forEach(function (newNode) {
       this.appendChild(parentNode, newNode);
-    }.bind(this));
+    }, this);
   };
 
   this.getFirstChild = function (node) {
@@ -150,7 +150,7 @@ var Compiler = function () {
         this.emitLine('stack.push(nodes); nodes = [];');
         node.children.forEach(function (child, i) {
           this.compile(child, i);
-        }.bind(this));
+        }, this);
         this.emitLine('children = nodes; nodes = stack.pop();');
       } else {
         this.emitLine('children = [];');
@@ -164,10 +164,10 @@ var Compiler = function () {
         this.emitLine('stack.push(nodes); nodes = [];');
         attr.value.forEach(function (attrnode) {
           this.compile(attrnode);
-        }.bind(this));
+        }, this);
         this.emitLine('attrs["' + escapeLiteral(name) + '"]' +
           ' = nodes.join(""); nodes = stack.pop();');
-      }.bind(this));
+      }, this);
       if (key !== undefined) {
         this.emitLine('attrs.key = "' + escapeLiteral(key.toString()) + '";');
       }
