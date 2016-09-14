@@ -146,7 +146,6 @@ var Compiler = function () {
     } else if (node.node === 'variable') {
       this.emitLine('nodes.push(context["' + node.name + '"]);');
     } else {
-      console.log(node);
       if (node.children.length) {
         this.emitLine('stack.push(nodes); nodes = [];');
         node.children.forEach(function (child, i) {
@@ -163,10 +162,11 @@ var Compiler = function () {
         if (name === 'class') { name = 'className'; }
         if (name === 'for') { name = 'htmlFor'; }
         this.emitLine('stack.push(nodes); nodes = [];');
-        attr.value.forEach(function (node) {
-          this.compile(node);
+        attr.value.forEach(function (attrnode) {
+          this.compile(attrnode);
         }.bind(this));
-        this.emitLine('attrs["' + escapeLiteral(name) + '"] = nodes.join(""); nodes = stack.pop();');
+        this.emitLine('attrs["' + escapeLiteral(name) + '"]' +
+          ' = nodes.join(""); nodes = stack.pop();');
       }.bind(this));
       if (key !== undefined) {
         this.emitLine('attrs.key = "' + escapeLiteral(key.toString()) + '";');
