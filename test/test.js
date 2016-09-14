@@ -31,7 +31,9 @@ async.each(testCases, function (filename, cb) {
           }
 
           var tree = new cowlick.Template(input).render(context);
-          var output = ReactDOMServer.renderToStaticMarkup(tree) + '\n';
+          var output = ReactDOMServer.renderToStaticMarkup(tree);
+          // don't count the div wrapping the result
+          output = output.substring(5, output.length - 6) + '\n';
 
           assert.equal(output, expected);
           done(err);
