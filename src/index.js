@@ -42,6 +42,8 @@ Cow parser
 */
 
 var parse5 = require('parse5');
+var DOMProperty = require('react/lib/DOMProperty');
+var HTMLDOMPropertyConfig = require('react/lib/HTMLDOMPropertyConfig');
 var React = require('react'); // eslint-disable-line no-unused-vars
 
 var escapeLiteral = function (str) {
@@ -86,7 +88,17 @@ var TreeAdapter = function (tpltags) {
 
   this.createElement = function (tagName, namespaceURI, attrs) {
     attrs.forEach(function (attr) {
-      attr.value = this.uncowify(attr.value);
+      if (attr.value.indexOf(PLACEHOLDER) !== -1) {
+        attr.value = this.uncowify(attr.value);
+      }
+      // make sure we give React a truthy value for boolean attributes
+      var props = HTMLDOMPropertyConfig.Properties[attr.name];
+      // eslint-disable-next-line no-bitwise
+      if (props && (props & DOMProperty.injection.HAS_BOOLEAN_VALUE) &&
+          attr.value === '') {
+        console.log(attr.name);
+        attr.value = attr.name;
+      }
     }, this);
     return {
       node: 'tag',
@@ -161,19 +173,25 @@ var Compiler = function () {
         var name = attr.name;
         if (name === 'class') { name = 'className'; }
         if (name === 'for') { name = 'htmlFor'; }
-        this.emitLine('stack.push(nodes); nodes = [];');
-        attr.value.forEach(function (attrnode) {
-          this.compile(attrnode);
-        }, this);
-        this.emitLine('attrs["' + escapeLiteral(name) + '"]' +
-          ' = nodes.join(""); nodes = stack.pop();');
+        if (typeof attr.value === 'string') {
+          this.emitLine(
+            'attrs["' + escapeLiteral(name) + '"]' +
+            ' = "' + escapeLiteral(attr.value) + '";');
+        } else {
+          this.emitLine('stack.push(nodes); nodes = [];');
+          attr.value.forEach(function (attrnode) {
+            this.compile(attrnode);
+          }, this);
+          this.emitLine('attrs["' + escapeLiteral(name) + '"]' +
+            ' = nodes.join(""); nodes = stack.pop();');
+        }
       }, this);
       if (key !== undefined) {
         this.emitLine('attrs.key = "' + escapeLiteral(key.toString()) + '";');
       }
 
       this.emitLine('nodes.push(React.createElement("' +
-        node.tag + '", attrs, children));');
+        node.tag + '", attrs, children.length ? children : null));');
     }
   };
 
