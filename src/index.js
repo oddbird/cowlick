@@ -41,10 +41,14 @@ Cow parser
 
 */
 
+var fs = require('fs');
 var parse5 = require('parse5');
+var path = require('path');
+var pegjs = require('pegjs');
 var DOMProperty = require('react/lib/DOMProperty');
 var HTMLDOMPropertyConfig = require('react/lib/HTMLDOMPropertyConfig');
 var React = require('react'); // eslint-disable-line no-unused-vars
+var util = require('util');
 
 var escapeLiteral = function (str) {
   str = str.replace(/\\/g, '\\\\');
@@ -66,7 +70,9 @@ var TreeAdapter = function (tpltags) {
     for (var i = 0; i < length - 1; i = i + 1) {
       parts.splice((i * 2) + 1, 0, tpltags.shift());
     }
-    return parts.map(function (part) {
+    return parts.filter(function (part) {
+      return part !== '';
+    }).map(function (part) {
       if (typeof part === 'string') {
         part = {
           node: 'text',
@@ -96,7 +102,6 @@ var TreeAdapter = function (tpltags) {
       // eslint-disable-next-line no-bitwise
       if (props && (props & DOMProperty.injection.HAS_BOOLEAN_VALUE) &&
           attr.value === '') {
-        console.log(attr.name);
         attr.value = attr.name;
       }
     }, this);
@@ -144,6 +149,8 @@ var TreeAdapter = function (tpltags) {
   };
 };
 
+var grammar = fs.readFileSync(path.join(__dirname, 'grammar.txt'), 'utf8');
+var cowParser = pegjs.generate(grammar);
 
 var Compiler = function () {
   this.out = [];
@@ -155,6 +162,17 @@ var Compiler = function () {
   this.compile = function (node, key) {
     if (node.node === 'text') {
       this.emitLine('nodes.push("' + escapeLiteral(node.value) + '");');
+    } else if (node.node === 'expression') {
+      this.emitLine('stack.push(nodes); nodes = [];');
+      this.compile(node.body);
+      this.emitLine('children = nodes; nodes = stack.pop();');
+      this.emitLine('nodes.push(children[0].toString());');
+    } else if (node.node === 'boolean') {
+      this.emitLine('nodes.push(' + node.value + ');');
+    } else if (node.node === 'float') {
+      this.emitLine('nodes.push(' + node.value + ');');
+    } else if (node.node === 'string') {
+      this.emitLine('nodes.push("' + escapeLiteral(node.value) + '");');
     } else if (node.node === 'variable') {
       this.emitLine('nodes.push(context["' + node.name + '"]);');
     } else {
@@ -163,9 +181,6 @@ var Compiler = function () {
         node.children.forEach(function (child, i) {
           this.compile(child, i);
         }, this);
-        this.emitLine('children = nodes; nodes = stack.pop();');
-      } else {
-        this.emitLine('children = [];');
       }
 
       this.emitLine('attrs = {};');
@@ -190,6 +205,11 @@ var Compiler = function () {
         this.emitLine('attrs.key = "' + escapeLiteral(key.toString()) + '";');
       }
 
+      if (node.children.length) {
+        this.emitLine('children = nodes; nodes = stack.pop();');
+      } else {
+        this.emitLine('children = [];');
+      }
       this.emitLine('nodes.push(React.createElement("' +
         node.tag + '", attrs, children.length ? children : null));');
     }
@@ -220,20 +240,36 @@ var Template = function (str) {
   };
 
   // Replace template tags with placeholders
-  // (@@@ this needs to actually parse template syntax)
   var tpltags = [];
-  str = str.replace(/{{(.*?)}}/g, function (tag, match) {
-    tpltags.push({
-      node: 'variable',
-      name: match.trim()
-    });
-    return PLACEHOLDER;
-  });
+  var pos = 0;
+  while (pos < str.length) {
+    pos = str.indexOf('{{', pos);
+    if (pos === -1) {
+      break;
+    }
+    var cud, end;
+    try {
+      cud = cowParser.parse(str.substring(pos));
+      end = str.length;
+    } catch (parseError) {
+      if (parseError.expected[0].type === 'end') {
+        end = pos + parseError.location.end.offset - 1;
+        cud = cowParser.parse(str.substring(pos, end));
+      } else {
+        throw parseError;
+      }
+    }
+    tpltags.push(cud);
+    str = str.substring(0, pos) + PLACEHOLDER + str.substring(end);
+    pos = pos + PLACEHOLDER.length;
+  }
 
   var tree = parse5.parseFragment(
     str, { treeAdapter: new TreeAdapter(tpltags) });
+  console.log(util.inspect(tree, { depth: 8 }));
 
   var code = this.compile(tree);
+  console.log(code);
   this.compiled = eval(code); // eslint-disable-line no-eval
 };
 

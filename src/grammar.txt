@@ -1,77 +1,97 @@
-document
-  = ws? doctype? root:tag ws? {
-    return root;
-  }
-
 tag
-  = tag:open_tag children:(text / curly / tag)* close_tag {
+  = statement_tag / expression_tag / comment_tag
+
+statement_tag
+  = '{%' ws? block:(if / elif / else / endif) ws? '%}' {
+    return block;
+  }
+
+if
+  = 'if' ws expression:expression {
     return {
-      tag: tag.name,
-      attrs: tag.attrs,
-      children
+      node: 'if',
+      condition: expression
+    }
+  }
+elif
+  = 'elif' ws expression:expression {
+    return {
+      node: 'elif',
+      condition: expression
+    };
+  }
+else = 'else' { return { node: 'else' }; }
+endif = 'endif' { return { node: 'endif' }; }
+
+expression_tag
+  = '{{' ws? expression:expression ws? '}}' {
+    return {
+      node: 'expression',
+      body: expression
     };
   }
 
-open_tag
-  = '<' name:name attrs:(attribute)* '>' {
+expression
+  = literal / variable
+
+literal
+  = boolean / string / float
+
+boolean
+  = value:('True' / 'False' / 'true' / 'false') {
     return {
-      name,
-      attrs
+      node: 'boolean',
+      value: (value.toLowerCase() == 'true')
     };
   }
 
-close_tag
-  = '</' name '>'
+string
+  = sq_string / dq_string
 
-doctype
-  = '<!doctype'i name '>'
-
-text
-  = text:[^<{]+ {
-    return text.join('');
-  }
-
-attribute
-  = ws name:name value:('=' value)? {
+dq_string
+  = '"' value:([^"]+) '"' {
     return {
-      name,
-      value: value ? value[1] : true
+      node: 'string',
+      value: value.join('')
     };
   }
 
-name
-  = name:([A-Za-z][A-Za-z0-9-]*) {
-    return name[0] + name[1].join('');
+sq_string
+  = "'" value:([^']+) "'" {
+    return {
+      node: 'string',
+      value: value.join('')
+    };
+  }
+
+float
+  = value:([0-9.]+) {
+    return {
+      node: 'float',
+      value: parseFloat(value.join(''))
+    };
+  }
+
+variable
+  = name:identifier {
+    return {
+      node: 'variable',
+      name: name
+    }
   }
 
 identifier
-  = name:([a-zA-Z_][a-zA-Z0-9_]*) {
+  = name:([a-zA-Z][a-zA-Z0-9_]*) {
     return name[0] + name[1].join('');
-  }
-
-value
-  = '"' value:[^"]+ '"' {
-    return value.join('');
-  }
-  / "'" value:[^']+ "'" {
-    return value.join('');
-  }
-  / value:[^<> ]+ {
-    return value.join('');
   }
 
 ws
   = [\n ]+
 
-curly
-  = '{' inner:(variable / text) '}' {
-    return (inner.type === 'variable') ? inner : '{' + inner + '}'
-  }
-
-variable
-  = '{' ws? name:identifier ws? '}' {
+comment_tag
+  = '{#' ws? comment:([.]*) ws? '#}' {
     return {
-      type: 'variable',
-      name
+      node: 'comment',
+      value: comment.join('')
     }
   }
