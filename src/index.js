@@ -175,6 +175,18 @@ var Compiler = function () {
       this.emitLine('nodes.push("' + escapeLiteral(node.value) + '");');
     } else if (node.node === 'variable') {
       this.emitLine('nodes.push(context["' + node.name + '"]);');
+    } else if (node.node === 'if') {
+      this.emitLine('if ((function (nodes) {');
+      this.compile(node.condition);
+      this.emitLine('return nodes[0]; })([])) {');
+    } else if (node.node === 'elif') {
+      this.emitLine('} else if ((function (nodes) {');
+      this.compile(node.condition);
+      this.emitLine('return nodes[0]; })([])) {');
+    } else if (node.node === 'else') {
+      this.emitLine('} else {');
+    } else if (node.node === 'endif') {
+      this.emitLine('}');
     } else {
       if (node.children.length) {
         this.emitLine('stack.push(nodes); nodes = [];');
@@ -243,10 +255,11 @@ var Template = function (str) {
   var tpltags = [];
   var pos = 0;
   while (pos < str.length) {
-    pos = str.indexOf('{{', pos);
-    if (pos === -1) {
+    var offset = str.substring(pos).search(/{[{%#]/);
+    if (offset === -1) {
       break;
     }
+    pos = pos + offset;
     var cud, end;
     try {
       cud = cowParser.parse(str.substring(pos));
