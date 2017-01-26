@@ -10,7 +10,7 @@ module.exports = {
     library: 'cowlick'
   },
   externals: {
-    React: 'react'
+    react: 'React'
   },
   node: {
     fs: 'empty'
