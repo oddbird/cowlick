@@ -20,7 +20,8 @@
     "gutil": "^1.6.4",
     "istanbul": "^0.4.5",
     "mocha": "^3.0.2",
-    "transform-loader": "^0.2.3"
+    "transform-loader": "^0.2.3",
+    "webpack": "^1.14.0"
   },
   "scripts": {
     "test": "./node_modules/.bin/gulp test"

@@ -47,7 +47,6 @@ var path = require('path');
 var pegjs = require('pegjs');
 var DOMProperty = require('react/lib/DOMProperty');
 var HTMLDOMPropertyConfig = require('react/lib/HTMLDOMPropertyConfig');
-var React = require('react'); // eslint-disable-line no-unused-vars
 var util = require('util');
 
 var escapeLiteral = function (str) {
@@ -259,10 +258,6 @@ var Template = function (str) {
     return compiler.getCode();
   };
 
-  this.render = function (context) {
-    return this.compiled(context);
-  };
-
   // Replace template tags with placeholders
   var tpltags = [];
   var pos = 0;
@@ -295,7 +290,7 @@ var Template = function (str) {
 
   var code = this.compile(tree);
   console.log(code);
-  this.compiled = eval(code); // eslint-disable-line no-eval
+  this.render = eval(code); // eslint-disable-line no-eval
 };
 
 module.exports.Template = Template;
