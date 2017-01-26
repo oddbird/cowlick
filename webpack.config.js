@@ -9,6 +9,9 @@ module.exports = {
     libraryTarget: 'var',
     library: 'cowlick'
   },
+  externals: {
+    React: 'react'
+  },
   node: {
     fs: 'empty'
   },

@@ -47,6 +47,7 @@ var path = require('path');
 var pegjs = require('pegjs');
 var DOMProperty = require('react/lib/DOMProperty');
 var HTMLDOMPropertyConfig = require('react/lib/HTMLDOMPropertyConfig');
+var React = require('React');  // eslint-disable-line no-unused-vars
 var util = require('util');
 
 var escapeLiteral = function (str) {
@@ -195,35 +196,44 @@ var Compiler = function () {
         }, this);
       }
 
-      this.emitLine('attrs = {};');
-      node.attrs.forEach(function (attr) {
-        var name = attr.name;
-        if (name === 'class') { name = 'className'; }
-        if (name === 'for') { name = 'htmlFor'; }
-        if (typeof attr.value === 'string') {
-          this.emitLine(
-            'attrs["' + escapeLiteral(name) + '"]' +
-            ' = "' + escapeLiteral(attr.value) + '";');
-        } else {
-          this.emitLine('stack.push(nodes); nodes = [];');
-          attr.value.forEach(function (attrnode) {
-            this.compile(attrnode);
-          }, this);
-          this.emitLine('attrs["' + escapeLiteral(name) + '"]' +
-            ' = nodes.join(""); nodes = stack.pop();');
+      var attrs = 'attrs';
+      if (node.attrs.length) {
+        this.emitLine('attrs = {};');
+        node.attrs.forEach(function (attr) {
+          var name = attr.name;
+          if (name === 'class') { name = 'className'; }
+          if (name === 'for') { name = 'htmlFor'; }
+          if (typeof attr.value === 'string') {
+            this.emitLine(
+              'attrs["' + escapeLiteral(name) + '"]' +
+              ' = "' + escapeLiteral(attr.value) + '";');
+          } else {
+            this.emitLine('stack.push(nodes); nodes = [];');
+            attr.value.forEach(function (attrnode) {
+              this.compile(attrnode);
+            }, this);
+            this.emitLine('attrs["' + escapeLiteral(name) + '"]' +
+              ' = nodes.join(""); nodes = stack.pop();');
+          }
+        }, this);
+        if (key !== undefined) {
+          this.emitLine('attrs.key = "' + escapeLiteral(key.toString()) + '";');
         }
-      }, this);
-      if (key !== undefined) {
-        this.emitLine('attrs.key = "' + escapeLiteral(key.toString()) + '";');
+      } else if (key !== undefined) {
+        this.emitLine(
+          'attrs = {key: "' + escapeLiteral(key.toString()) + '"};');
+      } else {
+        attrs = 'undefined';
       }
 
+      var children = 'children';
       if (node.children.length) {
         this.emitLine(
           'children = nodes.length ? nodes : null; nodes = stack.pop();');
       } else {
-        this.emitLine('children = null;');
+        children = 'undefined';
       }
-      this.emitNode(this.createElement(node.tag, 'attrs', 'children'));
+      this.emitNode(this.createElement(node.tag, attrs, children));
     }
   };
 
