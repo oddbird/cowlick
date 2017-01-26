@@ -56,7 +56,7 @@ var escapeLiteral = function (str) {
   str = str.replace(/\n/g, '\\n');
   str = str.replace(/\r/g, '\\r');
   str = str.replace(/\t/g, '\\t');
-  return str;
+  return '"' + str + '"';
 };
 
 
@@ -172,7 +172,7 @@ var Compiler = function () {
   this.compileExpr = function (node) {
     var value = 'undefined';
     if (node.node === 'string') {
-      value = '"' + escapeLiteral(node.value) + '"';
+      value = escapeLiteral(node.value);
     } else if (node.node === 'boolean' || node.node === 'float') {
       value = node.value.toString();
     } else if (node.node === 'variable') {
@@ -183,7 +183,7 @@ var Compiler = function () {
 
   this.compile = function (node, key) {
     if (node.node === 'text') {
-      this.emitNode('"' + escapeLiteral(node.value) + '"');
+      this.emitNode(escapeLiteral(node.value));
     } else if (node.node === 'expression') {
       this.emitNode(this.compileExpr(node.body));
     } else if (node.node === 'if') {
@@ -209,28 +209,26 @@ var Compiler = function () {
       }, this);
     }
 
-    var attrs = 'attrs';
+    var attrs = [];
+    if (key !== undefined) {
+      attrs.push('key: ' + key.toString());
+    }
     if (node.attrs.length) {
-      this.emitLine('attrs = {};');
       node.attrs.forEach(function (attr) {
         var name = attr.name;
+        var value;
         if (name === 'class') { name = 'className'; }
         if (name === 'for') { name = 'htmlFor'; }
         if (typeof attr.value === 'string') {
-          this.emitLine(
-            'attrs["' + escapeLiteral(name) + '"]' +
-            ' = "' + escapeLiteral(attr.value) + '";');
+          value = escapeLiteral(attr.value);
         } else {
-          this.emitLine('attrs["' + escapeLiteral(name) + '"]' +
-            ' = ' + attr.value.map(this.compileExpr).join(' + ') + ';');
+          value = attr.value.map(this.compileExpr).join(' + ');
         }
+        attrs.push(escapeLiteral(name) + ': ' + value);
       }, this);
-      if (key !== undefined) {
-        this.emitLine('attrs.key = "' + escapeLiteral(key.toString()) + '";');
-      }
-    } else if (key !== undefined) {
-      this.emitLine(
-        'attrs = {key: "' + escapeLiteral(key.toString()) + '"};');
+    }
+    if (attrs.length) {
+      attrs = '{' + attrs.join(', ') + '}';
     } else {
       attrs = 'undefined';
     }
@@ -257,7 +255,7 @@ var Compiler = function () {
   this.emitLine('(function fn (context) {');
   this.emitLine('var nodes = [];');
   this.emitLine('var stack = [nodes];');
-  this.emitLine('var children, attrs;');
+  this.emitLine('var children;');
 };
 
 var Template = function (str) {
