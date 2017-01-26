@@ -147,6 +147,10 @@ var TreeAdapter = function (tpltags) {
   this.getNamespaceURI = function (element) {
     return element.namespace;
   };
+
+  this.isQuirksMode = function () {
+    return false;
+  };
 };
 
 var grammar = fs.readFileSync(path.join(__dirname, 'grammar.txt'), 'utf8');

@@ -194,6 +194,10 @@ var cowlick =
 	  this.getNamespaceURI = function (element) {
 	    return element.namespace;
 	  };
+
+	  this.isQuirksMode = function () {
+	    return false;
+	  };
 	};
 
 	var grammar = "tag\n  = statement_tag / expression_tag / comment_tag\n\nstatement_tag\n  = '{%' ws? block:(if / elif / else / endif) ws? '%}' {\n    return block;\n  }\n\nif\n  = 'if' ws expression:expression {\n    return {\n      node: 'if',\n      condition: expression\n    }\n  }\nelif\n  = 'elif' ws expression:expression {\n    return {\n      node: 'elif',\n      condition: expression\n    };\n  }\nelse = 'else' { return { node: 'else' }; }\nendif = 'endif' { return { node: 'endif' }; }\n\nexpression_tag\n  = '{{' ws? expression:expression ws? '}}' {\n    return {\n      node: 'expression',\n      body: expression\n    };\n  }\n\nexpression\n  = literal / variable\n\nliteral\n  = boolean / string / float\n\nboolean\n  = value:('True' / 'False' / 'true' / 'false') {\n    return {\n      node: 'boolean',\n      value: (value.toLowerCase() == 'true')\n    };\n  }\n\nstring\n  = sq_string / dq_string\n\ndq_string\n  = '\"' value:([^\"]+) '\"' {\n    return {\n      node: 'string',\n      value: value.join('')\n    };\n  }\n\nsq_string\n  = \"'\" value:([^']+) \"'\" {\n    return {\n      node: 'string',\n      value: value.join('')\n    };\n  }\n\nfloat\n  = value:([0-9.]+) {\n    return {\n      node: 'float',\n      value: parseFloat(value.join(''))\n    };\n  }\n\nvariable\n  = name:identifier {\n    return {\n      node: 'variable',\n      name: name\n    }\n  }\n\nidentifier\n  = name:([a-zA-Z][a-zA-Z0-9_]*) {\n    return name[0] + name[1].join('');\n  }\n\nws\n  = [\\n ]+\n\ncomment_tag\n  = '{#' ws? comment:([.]*) ws? '#}' {\n    return {\n      node: 'comment',\n      value: comment.join('')\n    }\n  }\n";
