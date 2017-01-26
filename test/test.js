@@ -16,7 +16,7 @@ async.each(testCases, function (filename, cb) {
         path.join(__dirname, 'cases', filename), 'utf8',
         function (err, data) {
           if (err) { throw err; }
-          var parts = data.split(/\n\s*---\s*\n/);
+          var parts = data.split(/\n[^\S\n]*---[^\S\n]*\n/);
           var input = parts[0];
           var context, expected;
           if (parts.length === 3) {

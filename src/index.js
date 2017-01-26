@@ -64,7 +64,7 @@ var PLACEHOLDER = '🐮';
 
 var TreeAdapter = function (tpltags) {
 
-  this.uncowify = function (text) {
+  this.uncowify = function (text, isExpr) {
     var parts = text.split(PLACEHOLDER);
     var length = parts.length;
     for (var i = 0; i < length - 1; i = i + 1) {
@@ -75,9 +75,11 @@ var TreeAdapter = function (tpltags) {
     }).map(function (part) {
       if (typeof part === 'string') {
         part = {
-          node: 'text',
+          node: isExpr ? 'string' : 'text',
           value: part
         };
+      } else if (isExpr && part.node === 'expression') {
+        part = part.body;
       }
       return part;
     });
@@ -95,7 +97,7 @@ var TreeAdapter = function (tpltags) {
   this.createElement = function (tagName, namespaceURI, attrs) {
     attrs.forEach(function (attr) {
       if (attr.value.indexOf(PLACEHOLDER) !== -1) {
-        attr.value = this.uncowify(attr.value);
+        attr.value = this.uncowify(attr.value, true);
       }
       // make sure we give React a truthy value for boolean attributes
       var props = HTMLDOMPropertyConfig.Properties[attr.name];
@@ -167,80 +169,78 @@ var Compiler = function () {
     this.emitLine('nodes.push(' + code + ');');
   };
 
+  this.compileExpr = function (node) {
+    var value = 'undefined';
+    if (node.node === 'string') {
+      value = '"' + escapeLiteral(node.value) + '"';
+    } else if (node.node === 'boolean' || node.node === 'float') {
+      value = node.value.toString();
+    } else if (node.node === 'variable') {
+      value = 'context["' + node.name + '"]';
+    }
+    return value;
+  };
+
   this.compile = function (node, key) {
-    if (node.node === 'text' || node.node === 'string') {
+    if (node.node === 'text') {
       this.emitNode('"' + escapeLiteral(node.value) + '"');
     } else if (node.node === 'expression') {
-      this.scopedCompile(node.body, 'children');
-      this.emitNode('children[0].toString()');
-    } else if (node.node === 'boolean' || node.node === 'float') {
-      this.emitNode(node.value);
-    } else if (node.node === 'variable') {
-      this.emitNode('context["' + node.name + '"]');
+      this.emitNode(this.compileExpr(node.body));
     } else if (node.node === 'if') {
-      this.scopedCompile(node.condition, 'cond');
-      this.emitLine('if (cond) {');
+      this.emitLine('if (' + this.compileExpr(node.condition) + ') {');
     } else if (node.node === 'elif') {
-      this.emitLine('} else if ((function (nodes) {');
-      this.compile(node.condition);
-      this.emitLine('return nodes[0]; })([])) {');
+      this.emitLine('} else if (' + this.compileExpr(node.condition) + ') {');
     } else if (node.node === 'else') {
       this.emitLine('} else {');
     } else if (node.node === 'endif') {
       this.emitLine('}');
+    } else if (node.node === 'tag') {
+      this.emitElement(node, key);
     } else {
-      if (node.children.length) {
-        this.emitLine('stack.push(nodes); nodes = [];');
-        node.children.forEach(function (child, i) {
-          this.compile(child, i);
-        }, this);
-      }
-
-      var attrs = 'attrs';
-      if (node.attrs.length) {
-        this.emitLine('attrs = {};');
-        node.attrs.forEach(function (attr) {
-          var name = attr.name;
-          if (name === 'class') { name = 'className'; }
-          if (name === 'for') { name = 'htmlFor'; }
-          if (typeof attr.value === 'string') {
-            this.emitLine(
-              'attrs["' + escapeLiteral(name) + '"]' +
-              ' = "' + escapeLiteral(attr.value) + '";');
-          } else {
-            this.emitLine('stack.push(nodes); nodes = [];');
-            attr.value.forEach(function (attrnode) {
-              this.compile(attrnode);
-            }, this);
-            this.emitLine('attrs["' + escapeLiteral(name) + '"]' +
-              ' = nodes.join(""); nodes = stack.pop();');
-          }
-        }, this);
-        if (key !== undefined) {
-          this.emitLine('attrs.key = "' + escapeLiteral(key.toString()) + '";');
-        }
-      } else if (key !== undefined) {
-        this.emitLine(
-          'attrs = {key: "' + escapeLiteral(key.toString()) + '"};');
-      } else {
-        attrs = 'undefined';
-      }
-
-      var children = 'children';
-      if (node.children.length) {
-        this.emitLine(
-          'children = nodes.length ? nodes : null; nodes = stack.pop();');
-      } else {
-        children = 'undefined';
-      }
-      this.emitNode(this.createElement(node.tag, attrs, children));
+      throw 'Unrecognized node type: ' + node.node;
     }
   };
 
-  this.scopedCompile = function (node, result) {
-    this.emitLine('stack.push(nodes); nodes = [];');
-    this.compile(node);
-    this.emitLine(result + ' = nodes; nodes = stack.pop();');
+  this.emitElement = function (node, key) {
+    if (node.children.length) {
+      this.emitLine('stack.push(nodes); nodes = [];');
+      node.children.forEach(function (child, i) {
+        this.compile(child, i);
+      }, this);
+    }
+
+    var attrs = 'attrs';
+    if (node.attrs.length) {
+      this.emitLine('attrs = {};');
+      node.attrs.forEach(function (attr) {
+        var name = attr.name;
+        if (name === 'class') { name = 'className'; }
+        if (name === 'for') { name = 'htmlFor'; }
+        if (typeof attr.value === 'string') {
+          this.emitLine(
+            'attrs["' + escapeLiteral(name) + '"]' +
+            ' = "' + escapeLiteral(attr.value) + '";');
+        } else {
+          this.emitLine('attrs["' + escapeLiteral(name) + '"]' +
+            ' = ' + attr.value.map(this.compileExpr).join(' + ') + ';');
+        }
+      }, this);
+      if (key !== undefined) {
+        this.emitLine('attrs.key = "' + escapeLiteral(key.toString()) + '";');
+      }
+    } else if (key !== undefined) {
+      this.emitLine(
+        'attrs = {key: "' + escapeLiteral(key.toString()) + '"};');
+    } else {
+      attrs = 'undefined';
+    }
+
+    var children = 'undefined';
+    if (node.children.length) {
+      this.emitLine('children = nodes; nodes = stack.pop()');
+      children = 'children';
+    }
+    this.emitNode(this.createElement(node.tag, attrs, children));
   };
 
   this.createElement = function (tag, attrs, children) {
@@ -257,7 +257,7 @@ var Compiler = function () {
   this.emitLine('(function fn (context) {');
   this.emitLine('var nodes = [];');
   this.emitLine('var stack = [nodes];');
-  this.emitLine('var children, attrs, cond;');
+  this.emitLine('var children, attrs;');
 };
 
 var Template = function (str) {
