@@ -40,6 +40,17 @@ async.each(testCases, function (filename, cb) {
         }
       );
     });
+
   });
   cb();
+});
+
+describe('Template', function () {
+  it('throws syntax error', function () {
+    try {
+      new cowlick.Template('{{').render();
+    } catch (err) {
+      assert.equal(err.name, 'SyntaxError');
+    }
+  });
 });

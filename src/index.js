@@ -159,26 +159,23 @@ var Compiler = function () {
     this.out.push(code + '\n');
   };
 
+  this.emitNode = function (code) {
+    this.emitLine('nodes.push(' + code + ');');
+  };
+
   this.compile = function (node, key) {
-    if (node.node === 'text') {
-      this.emitLine('nodes.push("' + escapeLiteral(node.value) + '");');
+    if (node.node === 'text' || node.node === 'string') {
+      this.emitNode('"' + escapeLiteral(node.value) + '"');
     } else if (node.node === 'expression') {
-      this.emitLine('stack.push(nodes); nodes = [];');
-      this.compile(node.body);
-      this.emitLine('children = nodes; nodes = stack.pop();');
-      this.emitLine('nodes.push(children[0].toString());');
-    } else if (node.node === 'boolean') {
-      this.emitLine('nodes.push(' + node.value + ');');
-    } else if (node.node === 'float') {
-      this.emitLine('nodes.push(' + node.value + ');');
-    } else if (node.node === 'string') {
-      this.emitLine('nodes.push("' + escapeLiteral(node.value) + '");');
+      this.scopedCompile(node.body, 'children');
+      this.emitNode('children[0].toString()');
+    } else if (node.node === 'boolean' || node.node === 'float') {
+      this.emitNode(node.value);
     } else if (node.node === 'variable') {
-      this.emitLine('nodes.push(context["' + node.name + '"]);');
+      this.emitNode('context["' + node.name + '"]');
     } else if (node.node === 'if') {
-      this.emitLine('if ((function (nodes) {');
-      this.compile(node.condition);
-      this.emitLine('return nodes[0]; })([])) {');
+      this.scopedCompile(node.condition, 'cond');
+      this.emitLine('if (cond) {');
     } else if (node.node === 'elif') {
       this.emitLine('} else if ((function (nodes) {');
       this.compile(node.condition);
@@ -218,13 +215,24 @@ var Compiler = function () {
       }
 
       if (node.children.length) {
-        this.emitLine('children = nodes; nodes = stack.pop();');
+        this.emitLine(
+          'children = nodes.length ? nodes : null; nodes = stack.pop();');
       } else {
-        this.emitLine('children = [];');
+        this.emitLine('children = null;');
       }
-      this.emitLine('nodes.push(React.createElement("' +
-        node.tag + '", attrs, children.length ? children : null));');
+      this.emitNode(this.createElement(node.tag, 'attrs', 'children'));
     }
+  };
+
+  this.scopedCompile = function (node, result) {
+    this.emitLine('stack.push(nodes); nodes = [];');
+    this.compile(node);
+    this.emitLine(result + ' = nodes; nodes = stack.pop();');
+  };
+
+  this.createElement = function (tag, attrs, children) {
+    return (
+      'React.createElement("' + tag + '", ' + attrs + ', ' + children + ')');
   };
 
   this.getCode = function () {
