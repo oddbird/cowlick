@@ -244,7 +244,7 @@ var Compiler = function () {
   this.emitLine('(function fn (context) {');
   this.emitLine('var nodes = [];');
   this.emitLine('var stack = [nodes];');
-  this.emitLine('var children, attrs;');
+  this.emitLine('var children, attrs, cond;');
 };
 
 var Template = function (str) {
