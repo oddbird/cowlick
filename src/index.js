@@ -48,7 +48,7 @@ var pegjs = require('pegjs');
 var DOMProperty = require('react-dom/lib/DOMProperty');
 var HTMLDOMPropertyConfig = require('react-dom/lib/HTMLDOMPropertyConfig');
 var React = require('react');  // eslint-disable-line no-unused-vars
-var util = require('util');
+// var util = require('util');
 
 var escapeLiteral = function (str) {
   str = str.replace(/\\/g, '\\\\');
