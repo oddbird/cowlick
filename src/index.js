@@ -60,11 +60,12 @@ var escapeLiteral = function (str) {
 };
 
 
-var PLACEHOLDER = '🐮';
+var COW = '🐮';
+var PLACEHOLDER = '<!--' + COW + '-->';
 
 var TreeAdapter = function (tpltags) {
 
-  this.uncowify = function (text, isExpr) {
+  this.uncowifyAttr = function (text) {
     var parts = text.split(PLACEHOLDER);
     var length = parts.length;
     for (var i = 0; i < length - 1; i = i + 1) {
@@ -75,10 +76,10 @@ var TreeAdapter = function (tpltags) {
     }).map(function (part) {
       if (typeof part === 'string') {
         part = {
-          node: isExpr ? 'string' : 'text',
+          node: 'string',
           value: part
         };
-      } else if (isExpr && part.node === 'expression') {
+      } else if (part.node === 'expression') {
         part = part.body;
       }
       return part;
@@ -97,7 +98,7 @@ var TreeAdapter = function (tpltags) {
   this.createElement = function (tagName, namespaceURI, attrs) {
     attrs.forEach(function (attr) {
       if (attr.value.indexOf(PLACEHOLDER) !== -1) {
-        attr.value = this.uncowify(attr.value, true);
+        attr.value = this.uncowifyAttr(attr.value);
       }
       // make sure we give React a truthy value for boolean attributes
       var props = HTMLDOMPropertyConfig.Properties[attr.name];
@@ -116,6 +117,16 @@ var TreeAdapter = function (tpltags) {
     };
   };
 
+  this.createCommentNode = function (data) {
+    if (data === COW) {
+      return tpltags.shift();
+    }
+    return {
+      node: 'comment',
+      data: data,
+    };
+  };
+
   this.appendChild = function (parentNode, newNode) {
     parentNode.children.push(newNode);
     newNode.parent = parentNode;
@@ -128,10 +139,10 @@ var TreeAdapter = function (tpltags) {
   };
 
   this.insertText = function (parentNode, text) {
-    var nodes = this.uncowify(text);
-    nodes.forEach(function (newNode) {
-      this.appendChild(parentNode, newNode);
-    }, this);
+    this.appendChild(parentNode, {
+      node: 'text',
+      value: text
+    });
   };
 
   this.getFirstChild = function (node) {
@@ -294,7 +305,7 @@ var Template = function (str) {
 
   var tree = parse5.parseFragment(
     str, { treeAdapter: new TreeAdapter(tpltags) });
-  console.log(util.inspect(tree, { depth: 8 }));
+  // console.log(util.inspect(tree, { depth: 8 }));
 
   var code = this.compile(tree);
   console.log(code);
