@@ -45,9 +45,9 @@ var fs = require('fs');
 var parse5 = require('parse5');
 var path = require('path');
 var pegjs = require('pegjs');
-var DOMProperty = require('react/lib/DOMProperty');
-var HTMLDOMPropertyConfig = require('react/lib/HTMLDOMPropertyConfig');
-var React = require('React');  // eslint-disable-line no-unused-vars
+var DOMProperty = require('react-dom/lib/DOMProperty');
+var HTMLDOMPropertyConfig = require('react-dom/lib/HTMLDOMPropertyConfig');
+var React = require('react');  // eslint-disable-line no-unused-vars
 var util = require('util');
 
 var escapeLiteral = function (str) {
@@ -211,7 +211,7 @@ var Compiler = function () {
 
     var attrs = [];
     if (key !== undefined) {
-      attrs.push('key: ' + key.toString());
+      attrs.push('key: "' + key.toString() + '"');
     }
     if (node.attrs.length) {
       node.attrs.forEach(function (attr) {
