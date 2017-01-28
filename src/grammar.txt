@@ -10,18 +10,33 @@ if
   = 'if' ws expression:expression {
     return {
       node: 'if',
-      condition: expression
+      condition: expression,
+      block: [],
+      else: null
     }
   }
 elif
   = 'elif' ws expression:expression {
     return {
       node: 'elif',
-      condition: expression
+      condition: expression,
+      block: [],
+      else: null
     };
   }
-else = 'else' { return { node: 'else' }; }
-endif = 'endif' { return { node: 'endif' }; }
+else
+  = 'else' {
+    return {
+      node: 'else',
+      block: []
+    };
+  }
+endif
+  = 'endif' {
+    return {
+      node: 'endif'
+    };
+  }
 
 expression_tag
   = '{{' ws? expression:expression ws? '}}' {

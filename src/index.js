@@ -88,7 +88,7 @@ var TreeAdapter = function (tpltags) {
 
   this.createDocumentFragment = function () {
     return {
-      node: 'tag',
+      node: 'element',
       tag: 'div',
       attrs: [],
       children: []
@@ -109,7 +109,7 @@ var TreeAdapter = function (tpltags) {
       }
     }, this);
     return {
-      node: 'tag',
+      node: 'element',
       tag: tagName,
       namespace: namespaceURI,
       attrs: attrs,
@@ -128,8 +128,31 @@ var TreeAdapter = function (tpltags) {
   };
 
   this.appendChild = function (parentNode, newNode) {
-    parentNode.children.push(newNode);
-    newNode.parent = parentNode;
+    if (newNode.node === 'if') {
+      parentNode.tplTag = newNode;
+      parentNode.block = newNode.block;
+      parentNode.children.push(newNode);
+      newNode.parent = parentNode;
+    } else if (newNode.node === 'elif') {
+      // @@@ error if not in if or elif
+      parentNode.tplTag.else = newNode;
+      parentNode.tplTag = newNode;
+      parentNode.block = newNode.block;
+    } else if (newNode.node === 'else') {
+      // @@@ error if not in if or elif
+      parentNode.tplTag.else = newNode;
+      parentNode.block = newNode.block;
+    } else if (newNode.node === 'endif') {
+      // @@@ error if not in if or elif
+      parentNode.tplTag = parentNode.block = null;
+    } else if (parentNode.block) {
+      // inside a template tag; add to its block
+      parentNode.block.push(newNode);
+    } else {
+      // not inside a template tag
+      parentNode.children.push(newNode);
+      newNode.parent = parentNode;
+    }
   };
 
   this.detachNode = function (node) {
@@ -174,63 +197,38 @@ var CompileError = function (message) {
 };
 
 var Compiler = function () {
-  this.out = [];
 
-  this.emitLine = function (code) {
-    this.out.push(code + '\n');
-  };
-
-  this.emitNode = function (code) {
-    this.emitLine('nodes.push(' + code + ');');
-  };
-
-  this.compileExpr = function (node) {
+  this.compileExpr = function (node, key) {
     var value = 'undefined';
-    if (node.node === 'string') {
+    if (node.node === 'string' || node.node === 'text') {
       value = escapeLiteral(node.value);
+    } else if (node.node === 'element') {
+      value = this.compileElement(node, key);
     } else if (node.node === 'boolean' || node.node === 'float') {
       value = node.value.toString();
     } else if (node.node === 'variable') {
       value = 'context["' + node.name + '"]';
+    } else if (node.node === 'if' || node.node === 'elif') {
+      value = (
+        '(' + this.compileExpr(node.condition) + ' ? ' +
+        node.block.map(this.compileExpr, this) + ' : ' +
+        (node.else ? this.compileExpr(node.else) : '""') + ')'
+      );
+    } else if (node.node === 'else') {
+      value = node.block.map(this.compileExpr, this);
     } else if (node.node === 'comment') {
+      // No way to render HTML comments using React :(
+      // https://github.com/facebook/react/issues/2810
       value = escapeLiteral('');
+    } else if (node.node === 'expression') {
+      value = this.compileExpr(node.body);
     } else {
       throw new CompileError('Unexpected node type: ' + node.node);
     }
     return value;
   };
 
-  this.compile = function (node, key) {
-    if (node.node === 'text') {
-      this.emitNode(escapeLiteral(node.value));
-    } else if (node.node === 'expression') {
-      this.emitNode(this.compileExpr(node.body));
-    } else if (node.node === 'if') {
-      this.emitLine('if (' + this.compileExpr(node.condition) + ') {');
-    } else if (node.node === 'elif') {
-      this.emitLine('} else if (' + this.compileExpr(node.condition) + ') {');
-    } else if (node.node === 'else') {
-      this.emitLine('} else {');
-    } else if (node.node === 'endif') {
-      this.emitLine('}');
-    } else if (node.node === 'tag') {
-      this.emitElement(node, key);
-    } else if (node.node === 'comment') {
-      // No way to render HTML comments using React :(
-      // https://github.com/facebook/react/issues/2810
-    } else {
-      throw new CompileError('Unexpected node type: ' + node.node);
-    }
-  };
-
-  this.emitElement = function (node, key) {
-    if (node.children.length) {
-      this.emitLine('stack.push(nodes); nodes = [];');
-      node.children.forEach(function (child, i) {
-        this.compile(child, i);
-      }, this);
-    }
-
+  this.compileElement = function (node, key) {
     var attrs = [];
     if (key !== undefined) {
       attrs.push('key: "' + key.toString() + '"');
@@ -244,7 +242,7 @@ var Compiler = function () {
         if (typeof attr.value === 'string') {
           value = escapeLiteral(attr.value);
         } else {
-          value = attr.value.map(this.compileExpr).join(' + ');
+          value = attr.value.map(this.compileExpr, this).join(' + ');
         }
         attrs.push(escapeLiteral(name) + ': ' + value);
       }, this);
@@ -257,10 +255,11 @@ var Compiler = function () {
 
     var children = 'undefined';
     if (node.children.length) {
-      this.emitLine('children = nodes; nodes = stack.pop()');
-      children = 'children';
+      children = (
+        '[' + node.children.map(this.compileExpr, this).join(', ') + ']');
     }
-    this.emitNode(this.createElement(node.tag, attrs, children));
+
+    return this.createElement(node.tag, attrs, children);
   };
 
   this.createElement = function (tag, attrs, children) {
@@ -268,26 +267,16 @@ var Compiler = function () {
       'React.createElement("' + tag + '", ' + attrs + ', ' + children + ')');
   };
 
-  this.getCode = function () {
-    this.emitLine('return nodes[0];');
-    this.emitLine('})');
-    return this.out.join('');
+  this.compile = function (node) {
+    return (
+      '(function fn (context) {\n  return ' +
+      this.compileExpr(node) + '\n})'
+    );
   };
-
-  this.emitLine('(function fn (context) {');
-  this.emitLine('var nodes = [];');
-  this.emitLine('var stack = [nodes];');
-  this.emitLine('var children;');
 };
 
 var Template = function (str, options) {
   options = options || {};
-
-  this.compile = function (tree) {
-    var compiler = new Compiler();
-    compiler.compile(tree);
-    return compiler.getCode();
-  };
 
   // Replace template tags with placeholders
   var tpltags = [];
@@ -322,7 +311,7 @@ var Template = function (str, options) {
     var util = require('util'); console.log(util.inspect(tree, { depth: 8 }));
   }
 
-  var code = this.compile(tree);
+  var code = new Compiler().compile(tree);
   /* istanbul ignore next */
   if (options.debug) {
     console.log(code);

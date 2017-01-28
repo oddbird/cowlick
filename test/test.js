@@ -61,16 +61,6 @@ describe('Compiler', function () {
       }
     });
   });
-
-  describe('compile', function () {
-    it('throws error on unrecognized node type', function () {
-      try {
-        new cowlick.Compiler('').compile({ node: 'bogus' });
-      } catch (err) {
-        assert.equal(err.message, 'Unexpected node type: bogus');
-      }
-    });
-  });
 });
 
 describe('Template', function () {
