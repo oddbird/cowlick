@@ -53,4 +53,15 @@ describe('Template', function () {
       assert.equal(err.name, 'SyntaxError');
     }
   });
+
+  describe('compile', function () {
+    it('throws error on unrecognized node type', function () {
+      try {
+        new cowlick.Template('').compile({ node: 'bogus' });
+      } catch (err) {
+        assert.equal(err, 'Unrecognized node type: bogus');
+      }
+    });
+  });
+
 });

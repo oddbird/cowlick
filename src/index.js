@@ -207,6 +207,8 @@ var Compiler = function () {
       this.emitLine('}');
     } else if (node.node === 'tag') {
       this.emitElement(node, key);
+    } else if (node.node === 'comment') {
+      // No way to render HTML comments using React :(
     } else {
       throw 'Unrecognized node type: ' + node.node;
     }
@@ -269,7 +271,8 @@ var Compiler = function () {
   this.emitLine('var children;');
 };
 
-var Template = function (str) {
+var Template = function (str, options) {
+  options = options || {};
 
   this.compile = function (tree) {
     var compiler = new Compiler();
@@ -308,7 +311,10 @@ var Template = function (str) {
   // console.log(util.inspect(tree, { depth: 8 }));
 
   var code = this.compile(tree);
-  console.log(code);
+  /* istanbul ignore next */
+  if (options.debug) {
+    console.log(code);
+  }
   this.render = eval(code); // eslint-disable-line no-eval
 };
 
