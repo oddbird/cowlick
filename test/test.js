@@ -18,7 +18,7 @@ async.each(testCases, function (filename, cb) {
           if (err) { throw err; }
           var parts = data.split(/\n[^\S\n]*---[^\S\n]*\n/);
           var input = parts[0];
-          var context, expected;
+          var context, expected, tree;
           if (parts.length === 3) {
             context = JSON.parse(parts[1]);
             expected = parts[2];
@@ -30,12 +30,17 @@ async.each(testCases, function (filename, cb) {
               ' found ' + parts.length + 'parts.');
           }
 
-          var tree = new cowlick.Template(input).render(context);
-          var output = ReactDOMServer.renderToStaticMarkup(tree);
-          // don't count the div wrapping the result
-          output = output.substring(5, output.length - 6) + '\n';
+          try {
+            tree = new cowlick.Template(input).render(context);
+            var output = ReactDOMServer.renderToStaticMarkup(tree);
+            // don't count the div wrapping the result
+            output = output.substring(5, output.length - 6) + '\n';
+            assert.equal(output, expected);
+          } catch (parseErr) {
+            tree = new cowlick.Template(input, { debug: true }).render(context);
+            throw parseErr;
+          }
 
-          assert.equal(output, expected);
           done(err);
         }
       );
@@ -43,6 +48,29 @@ async.each(testCases, function (filename, cb) {
 
   });
   cb();
+});
+
+
+describe('Compiler', function () {
+  describe('compileExpr', function () {
+    it('throws error on unrecognized node type', function () {
+      try {
+        new cowlick.Compiler().compileExpr({ node: 'bogus' });
+      } catch (err) {
+        assert.equal(err.message, 'Unexpected node type: bogus');
+      }
+    });
+  });
+
+  describe('compile', function () {
+    it('throws error on unrecognized node type', function () {
+      try {
+        new cowlick.Compiler('').compile({ node: 'bogus' });
+      } catch (err) {
+        assert.equal(err.message, 'Unexpected node type: bogus');
+      }
+    });
+  });
 });
 
 describe('Template', function () {
@@ -53,15 +81,4 @@ describe('Template', function () {
       assert.equal(err.name, 'SyntaxError');
     }
   });
-
-  describe('compile', function () {
-    it('throws error on unrecognized node type', function () {
-      try {
-        new cowlick.Template('').compile({ node: 'bogus' });
-      } catch (err) {
-        assert.equal(err, 'Unrecognized node type: bogus');
-      }
-    });
-  });
-
 });

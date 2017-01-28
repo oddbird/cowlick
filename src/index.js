@@ -169,6 +169,10 @@ var TreeAdapter = function (tpltags) {
 var grammar = fs.readFileSync(path.join(__dirname, 'grammar.txt'), 'utf8');
 var cowParser = pegjs.generate(grammar);
 
+var CompileError = function (message) {
+  this.message = message;
+};
+
 var Compiler = function () {
   this.out = [];
 
@@ -188,6 +192,10 @@ var Compiler = function () {
       value = node.value.toString();
     } else if (node.node === 'variable') {
       value = 'context["' + node.name + '"]';
+    } else if (node.node === 'comment') {
+      value = escapeLiteral('');
+    } else {
+      throw new CompileError('Unexpected node type: ' + node.node);
     }
     return value;
   };
@@ -209,8 +217,9 @@ var Compiler = function () {
       this.emitElement(node, key);
     } else if (node.node === 'comment') {
       // No way to render HTML comments using React :(
+      // https://github.com/facebook/react/issues/2810
     } else {
-      throw 'Unrecognized node type: ' + node.node;
+      throw new CompileError('Unexpected node type: ' + node.node);
     }
   };
 
@@ -308,7 +317,10 @@ var Template = function (str, options) {
 
   var tree = parse5.parseFragment(
     str, { treeAdapter: new TreeAdapter(tpltags) });
-  // console.log(util.inspect(tree, { depth: 8 }));
+  /* istanbul ignore next */
+  if (options.debug) {
+    var util = require('util'); console.log(util.inspect(tree, { depth: 8 }));
+  }
 
   var code = this.compile(tree);
   /* istanbul ignore next */
@@ -318,4 +330,5 @@ var Template = function (str, options) {
   this.render = eval(code); // eslint-disable-line no-eval
 };
 
+module.exports.Compiler = Compiler;
 module.exports.Template = Template;

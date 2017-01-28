@@ -89,9 +89,9 @@ ws
   = [\n ]+
 
 comment_tag
-  = '{#' ws? comment:([.]*) ws? '#}' {
+  = '{#' ws? comment:(!(ws? '#}') .)* ws? '#}' {
     return {
       node: 'comment',
-      value: comment.join('')
+      value: comment.map(function(x) { return x[1]; }).join('')
     }
   }
