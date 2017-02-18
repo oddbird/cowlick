@@ -2,7 +2,7 @@ tag
   = statement_tag / expression_tag / comment_tag
 
 statement_tag
-  = '{%' ws? block:(if / elif / else / endif) ws? '%}' {
+  = '{%' ws? block:(if / elif / else / endif / for / endfor) ws? '%}' {
     return block;
   }
 
@@ -35,6 +35,22 @@ endif
   = 'endif' {
     return {
       node: 'endif'
+    };
+  }
+
+for
+  = 'for' ws loopvar:identifier ws 'in' ws expression:expression {
+    return {
+      node: 'for',
+      loopvar: loopvar,
+      range: expression,
+      block: []
+    };
+  }
+endfor
+  = 'endfor' {
+    return {
+      node: 'endfor'
     };
   }
 

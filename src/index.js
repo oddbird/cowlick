@@ -128,7 +128,13 @@ var TreeAdapter = function (tpltags) {
   };
 
   this.appendChild = function (parentNode, newNode) {
-    if (newNode.node === 'if') {
+    if (newNode.block && newNode.block.length) {
+      // transplanting a block that was already processed
+      parentNode.children.push(newNode);
+      newNode.parent = parentNode;
+      return;
+    }
+    if (newNode.node === 'if' || newNode.node === 'for') {
       parentNode.tplTag = newNode;
       parentNode.block = newNode.block;
       parentNode.children.push(newNode);
@@ -142,8 +148,8 @@ var TreeAdapter = function (tpltags) {
       // @@@ error if not in if or elif
       parentNode.tplTag.else = newNode;
       parentNode.block = newNode.block;
-    } else if (newNode.node === 'endif') {
-      // @@@ error if not in if or elif
+    } else if (newNode.node === 'endif' || newNode.node === 'endfor') {
+      // @@@ error if not in correct block
       parentNode.tplTag = parentNode.block = null;
     } else if (parentNode.block) {
       // inside a template tag; add to its block
@@ -207,7 +213,8 @@ var Compiler = function () {
     } else if (node.node === 'boolean' || node.node === 'float') {
       value = node.value.toString();
     } else if (node.node === 'variable') {
-      value = 'context["' + node.name + '"]';
+      // @@@ error if not defined
+      value = 'ctx["' + node.name + '"]';
     } else if (node.node === 'if' || node.node === 'elif') {
       value = (
         '(' + this.compileExpr(node.condition) + ' ? ' +
@@ -216,12 +223,26 @@ var Compiler = function () {
       );
     } else if (node.node === 'else') {
       value = node.block.map(this.compileExpr, this);
+    } else if (node.node === 'expression') {
+      value = this.compileExpr(node.body);
+    } else if (node.node === 'for') {
+      // @@@ These function definitions should be hoisted
+      // to be static functions rather than closures
+      // @@@ Use a Frame/Scope object rather than
+      // creating the stacked scope using inline Object.create?
+      var fn = (
+        'function (i) {' +
+        'var ctx = Object.create(this);' +
+        'ctx[' + escapeLiteral(node.loopvar) + '] = i;' +
+        'return ' +
+        '"" + ' + node.block.map(this.compileExpr, this).join(' + ') +
+        '; }.bind(ctx)'
+      );
+      value = '(' + this.compileExpr(node.range) + ').map(' + fn + ')';
     } else if (node.node === 'comment') {
       // No way to render HTML comments using React :(
       // https://github.com/facebook/react/issues/2810
       value = escapeLiteral('');
-    } else if (node.node === 'expression') {
-      value = this.compileExpr(node.body);
     } else {
       throw new CompileError('Unexpected node type: ' + node.node);
     }
@@ -242,7 +263,7 @@ var Compiler = function () {
         if (typeof attr.value === 'string') {
           value = escapeLiteral(attr.value);
         } else {
-          value = attr.value.map(this.compileExpr, this).join(' + ');
+          value = '"" + ' + attr.value.map(this.compileExpr, this).join(' + ');
         }
         attrs.push(escapeLiteral(name) + ': ' + value);
       }, this);
@@ -255,6 +276,8 @@ var Compiler = function () {
 
     var children = 'undefined';
     if (node.children.length) {
+      // @@@ not sure this does the right thing if child
+      // compiles to a list (like `for`)
       children = (
         '[' + node.children.map(this.compileExpr, this).join(', ') + ']');
     }
@@ -269,7 +292,7 @@ var Compiler = function () {
 
   this.compile = function (node) {
     return (
-      '(function fn (context) {\n  return ' +
+      '(function fn (context) {\n  var ctx = context || {};\n  return ' +
       this.compileExpr(node) + '\n})'
     );
   };
