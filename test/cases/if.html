@@ -1,3 +1,7 @@
 {% if true %}true{% elif false %}false{% else %}other{% endif %}
+<div {% if true %}class="true"{% endif %}></div>
+<div class="{% if true %}true{% endif %}"></div>
 ---
 true
+<div class="true"></div>
+<div class="true"></div>

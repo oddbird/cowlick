@@ -13,36 +13,29 @@ Cow parser
 
 1. Replace template tags with placeholder
 
-   Currently looking for {{ .*? }} with a regexp.
+   Looks for matching {{ }}, {% %} and {# #} with a regexp.
    Creates a variable node for the match and puts in `tpltags` list,
-   then replaces the match with a placeholder (🐮).
-
-   Needs to also handle {% %}, {# #},
-   and needs to rely on the cow parser to know
-   where the tag ends.
+   then replaces the match with a placeholder (<!--🐮-->).
 
 2. Parse HTML into abstract syntax tree (AST)
 
    We are using the `parse5` library, a spec-compliant HTML 5 parser.
-   When the placeholder is found in an attribute or text,
+   When the placeholder comment is found in an attribute or text,
    replace it with the cow parse result stored in `tpltags` above.
 
-3. Match template tags
+   As nodes are added to the tree, find matching start/end template tags
+   and turn the nodes in between into children.
 
-   (TODO)
-   Find matching start/end template tags and turn the nodes in between
-   into children.
+3. Compile AST into function mapping a template context to a virtual DOM tree.
 
-4. Compile AST into function mapping a template context to a virtual DOM tree.
-
-   We do depth-first traversal of the AST and write code that
-   first creates the inner vdom elements, then creates parents referencing
-   their children.
+   We do depth-first traversal of the AST and write code
+   for a function to render virtual DOM elements.
 
 */
 
 var fs = require('fs');
 var parse5 = require('parse5');
+var Tokenizer = require('parse5/lib/tokenizer');
 var path = require('path');
 var pegjs = require('pegjs');
 var DOMProperty = require('react-dom/lib/DOMProperty');
@@ -63,9 +56,26 @@ var escapeLiteral = function (str) {
 var COW = '🐮';
 var PLACEHOLDER = '<!--' + COW + '-->';
 
+// Wrap the ATTRIBUTE_NAME_STATE of the tokenizer
+// to tweak parsing of the placeholder within tag attributes.
+var ATTRIBUTE_NAME_STATE = Tokenizer.prototype.ATTRIBUTE_NAME_STATE;
+Tokenizer.prototype.ATTRIBUTE_NAME_STATE = function (cp) {
+  // make sure we consume the closing angle bracket
+  // and avoid duplicate attribute names
+  if (cp === 0x3E && this.currentAttr.name === '<!--' + COW + '--') {
+    this.cowCount = (this.cowCount || 0) + 1;
+    this.currentAttr.name = COW + this.cowCount;
+    // eslint-disable-next-line no-underscore-dangle
+    this._leaveAttrName('AFTER_ATTRIBUTE_NAME_STATE');
+  } else {
+    // eslint-disable-next-line new-cap
+    ATTRIBUTE_NAME_STATE.call(this, cp);
+  }
+};
+
 var TreeAdapter = function (tpltags) {
 
-  this.uncowifyAttr = function (text) {
+  this.uncowifyAttrValue = function (text) {
     var parts = text.split(PLACEHOLDER);
     var length = parts.length;
     for (var i = 0; i < length - 1; i = i + 1) {
@@ -96,9 +106,26 @@ var TreeAdapter = function (tpltags) {
   };
 
   this.createElement = function (tagName, namespaceURI, attrs) {
+    var blocks = [[]];
     attrs.forEach(function (attr) {
+      if (attr.name.startsWith(COW)) {
+        var node = tpltags.shift();
+        if (node.node === 'if' || node.node === 'for') {
+          blocks[blocks.length - 1].push(node);
+          blocks.push(node.block);
+          return;
+        } else if (node.node === 'elif' || node.node === 'else') {
+          var ifnode = blocks.pop();
+          ifnode.else = node;
+          blocks.push(node.block);
+        } else if (node.node === 'endif' || node.node === 'endfor') {
+          blocks.pop();
+          return;
+        }
+      }
+      attr.node = 'attr';
       if (attr.value.indexOf(PLACEHOLDER) !== -1) {
-        attr.value = this.uncowifyAttr(attr.value);
+        attr.value = this.uncowifyAttrValue(attr.value);
       }
       // make sure we give React a truthy value for boolean attributes
       var props = HTMLDOMPropertyConfig.Properties[attr.name];
@@ -107,12 +134,13 @@ var TreeAdapter = function (tpltags) {
           attr.value === '') {
         attr.value = attr.name;
       }
+      blocks[blocks.length - 1].push(attr);
     }, this);
     return {
       node: 'element',
       tag: tagName,
       namespace: namespaceURI,
-      attrs: attrs,
+      attrs: blocks.pop(),
       children: []
     };
   };
@@ -219,7 +247,7 @@ var Compiler = function () {
       value = (
         '(' + this.compileExpr(node.condition) + ' ? ' +
         node.block.map(this.compileExpr, this) + ' : ' +
-        (node.else ? this.compileExpr(node.else) : '""') + ')'
+        (node.else ? this.compileExpr(node.else) : 'null') + ')'
       );
     } else if (node.node === 'else') {
       value = node.block.map(this.compileExpr, this);
@@ -239,6 +267,14 @@ var Compiler = function () {
         '; }.bind(ctx)'
       );
       value = '(' + this.compileExpr(node.range) + ').map(' + fn + ')';
+    } else if (node.node === 'attr') {
+      var attrValue = node.value;
+      if (typeof attrValue === 'string') {
+        attrValue = escapeLiteral(attrValue);
+      } else {
+        attrValue = attrValue.map(this.compileExpr, this).join(' + ');
+      }
+      value = '[' + escapeLiteral(node.name) + ', ' + attrValue + ']';
     } else if (node.node === 'comment') {
       // No way to render HTML comments using React :(
       // https://github.com/facebook/react/issues/2810
@@ -250,12 +286,19 @@ var Compiler = function () {
   };
 
   this.compileElement = function (node, key) {
-    var attrs = [];
-    if (key !== undefined) {
-      attrs.push('key: "' + key.toString() + '"');
-    }
+    // buildAttrs(
+    //   ["className": ()]
+    // );
+
+    var attrs;
+    var attrKV = [];
+    var onlySimpleAttrs = true;
     if (node.attrs.length) {
       node.attrs.forEach(function (attr) {
+        if (attr.node !== 'attr') {
+          onlySimpleAttrs = false;
+          return;
+        }
         var name = attr.name;
         var value;
         if (name === 'class') { name = 'className'; }
@@ -265,13 +308,24 @@ var Compiler = function () {
         } else {
           value = '"" + ' + attr.value.map(this.compileExpr, this).join(' + ');
         }
-        attrs.push(escapeLiteral(name) + ': ' + value);
+        attrKV.push(escapeLiteral(name) + ': ' + value);
       }, this);
     }
-    if (attrs.length) {
-      attrs = '{' + attrs.join(', ') + '}';
+    if (onlySimpleAttrs) {
+      if (key !== undefined) {
+        attrKV.push('"key": "' + key.toString() + '"');
+      }
+      if (attrKV.length) {
+        attrs = '{' + attrKV.join(', ') + '}';
+      } else {
+        attrs = 'undefined';
+      }
     } else {
-      attrs = 'undefined';
+      attrs = 'ctx.buildAttrs(';
+      if (key !== undefined) {
+        attrs = attrs + '["key", "' + key.toString() + '"], ';
+      }
+      attrs = attrs + node.attrs.map(this.compileExpr, this).join(', ') + ')';
     }
 
     var children = 'undefined';
@@ -292,9 +346,25 @@ var Compiler = function () {
 
   this.compile = function (node) {
     return (
-      '(function fn (context) {\n  var ctx = context || {};\n  return ' +
-      this.compileExpr(node) + '\n})'
+      '(function fn (ctx) {\n' +
+      '  return ' + this.compileExpr(node) + '\n})'
     );
+  };
+};
+
+var Context = function () {
+  this.buildAttrs = function () {
+    var attrs = {};
+    Array.from(arguments).forEach(function (attr) {
+      if (attr) {
+        var name = attr[0];
+        var value = attr[1];
+        if (name === 'class') { name = 'className'; }
+        if (name === 'for') { name = 'htmlFor'; }
+        attrs[name] = value;
+      }
+    });
+    return attrs;
   };
 };
 
@@ -339,7 +409,12 @@ var Template = function (str, options) {
   if (options.debug) {
     console.log(code);
   }
-  this.render = eval(code); // eslint-disable-line no-eval
+  var render = eval(code);  // eslint-disable-line no-eval
+
+  this.render = function (context) {
+    var ctx = Object.assign(new Context(), context);
+    return render(ctx);
+  };
 };
 
 module.exports.Compiler = Compiler;
