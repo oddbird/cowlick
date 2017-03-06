@@ -63,11 +63,11 @@ var PLACEHOLDER = '<!--' + COW + '-->';
 // to tweak parsing of the placeholder within tag attributes.
 var ATTRIBUTE_NAME_STATE = Tokenizer.prototype.ATTRIBUTE_NAME_STATE;
 Tokenizer.prototype.ATTRIBUTE_NAME_STATE = function (cp) {
-  // make sure we consume the closing angle bracket
-  // and avoid duplicate attribute names
-  if (cp === 0x3E && this.currentAttr.name === '<!--' + COW + '--') {
-    this.cowCount = (this.cowCount || 0) + 1;
-    this.currentAttr.name = COW + this.cowCount;
+  // make sure we don't shift out of the attribute name
+  // if we encounter a closing angle bracket that is part
+  // of the placeholder
+  if (cp === 0x3E && this.currentAttr.name.endsWith('<!--' + COW + '--')) {
+    this.currentAttr.name = this.currentAttr.name + '>';
     // eslint-disable-next-line no-underscore-dangle
     this._leaveAttrName('AFTER_ATTRIBUTE_NAME_STATE');
   } else {
@@ -82,14 +82,15 @@ Tokenizer.prototype._isDuplicateAttr = function () { return false; };
 
 var TreeAdapter = function (tpltags) {
 
-  this.uncowifyAttrValue = function (text) {
+  this.uncowify = function (text, inAttrName, blocks) {
     var parts = text.split(PLACEHOLDER);
     var length = parts.length;
     for (var i = 0; i < length - 1; i = i + 1) {
       parts.splice((i * 2) + 1, 0, tpltags.shift());
     }
-    var tag;
-    var blocks = [[]];
+    if (blocks === undefined) {
+      blocks = [[]];
+    }
     parts.forEach(function (node) {
       if (typeof node === 'string') {
         if (node !== '') {
@@ -100,11 +101,11 @@ var TreeAdapter = function (tpltags) {
         }
       } else if (node.node === 'if' || node.node === 'for') {
         blocks[blocks.length - 1].push(node);
-        tag = node;
+        blocks.tag = node;
         blocks.push(node.block);
       } else if (node.node === 'elif' || node.node === 'else') {
-        tag.else = node;
-        tag = node;
+        blocks.tag.else = node;
+        blocks.tag = node;
         blocks.pop(); blocks.push(node.block);
       } else if (node.node === 'endif' || node.node === 'endfor') {
         blocks.pop();
@@ -113,6 +114,17 @@ var TreeAdapter = function (tpltags) {
         blocks[blocks.length - 1].push(node.body);
       }
     });
+    return blocks;
+  };
+
+  this.uncowifyAttrValue = function (text) {
+    var blocks = this.uncowify(text);
+    if (blocks[0].length === 0) {
+      return '';
+    }
+    if (blocks[0].length === 1 && blocks[0][0].node === 'text') {
+      return blocks[0][0].value;
+    }
     return blocks[0];
   };
 
@@ -125,47 +137,47 @@ var TreeAdapter = function (tpltags) {
     };
   };
 
+  this.reactifyAttr = function (attr) {
+    // make sure we give React a truthy value for boolean attributes
+    var props = HTMLDOMPropertyConfig.Properties[attr.name];
+    // eslint-disable-next-line no-bitwise
+    if (props && (props & DOMProperty.injection.HAS_BOOLEAN_VALUE) &&
+        attr.value === '') {
+      attr.value = attr.name;
+    }
+    return attr;
+  };
+
   this.createElement = function (tagName, namespaceURI, attrs) {
-    var tag;
     var blocks = [[]];
-    console.log(attrs);
     attrs.forEach(function (attr) {
-      if (attr.name.startsWith(COW)) {
-        var node = tpltags.shift();
-        if (node.node === 'if' || node.node === 'for') {
-          blocks[blocks.length - 1].push(node);
-          tag = node;
-          blocks.push(node.block);
-          return;
-        } else if (node.node === 'elif' || node.node === 'else') {
-          tag.else = node;
-          tag = node;
-          blocks.pop(); blocks.push(node.block);
-          return;
-        } else if (node.node === 'endif' || node.node === 'endfor') {
-          blocks.pop();
-          return;
-        }
-        throw new CompileError('Unexpected node type: ' + node.node);
+      var startingLastBlock = blocks[blocks.length - 1];
+      var startingBlockLength = startingLastBlock.length;
+
+      this.uncowify(attr.name, true, blocks);
+
+      var lastBlock = blocks[blocks.length - 1];
+      var newIndex = lastBlock === startingLastBlock ? startingBlockLength : 0;
+      var newNodes = lastBlock.slice(newIndex);
+      var name;
+      if (newNodes.length === 1 && newNodes[0].node === 'text') {
+        name = newNodes[0].value;
+      } else {
+        name = newNodes;
       }
-      attr.node = 'attr';
-      if (attr.value.indexOf(PLACEHOLDER) !== -1) {
-        attr.value = this.uncowifyAttrValue(attr.value);
+      if (name.length > 1) {
+        lastBlock.splice(newIndex, lastBlock.length, this.reactifyAttr({
+          node: 'attr',
+          name: name,
+          value: this.uncowifyAttrValue(attr.value)
+        }));
       }
-      // make sure we give React a truthy value for boolean attributes
-      var props = HTMLDOMPropertyConfig.Properties[attr.name];
-      // eslint-disable-next-line no-bitwise
-      if (props && (props & DOMProperty.injection.HAS_BOOLEAN_VALUE) &&
-          attr.value === '') {
-        attr.value = attr.name;
-      }
-      blocks[blocks.length - 1].push(attr);
     }, this);
     return {
       node: 'element',
       tag: tagName,
       namespace: namespaceURI,
-      attrs: blocks.pop(),
+      attrs: blocks[0],
       children: []
     };
   };
@@ -284,13 +296,19 @@ var Compiler = function () {
         'var ctx = Object.create(this);' +
         'ctx[' + escapeLiteral(node.loopvar) + '] = i;' +
         'return ' +
-        '"" + ' + node.block.map(this.compileExpr, this).join(' + ') +
+        node.block.map(this.compileExpr, this).join(' + ') +
         '; }.bind(ctx)'
       );
-      value = '(' + this.compileExpr(node.range) + ').map(' + fn + ').join("")';
+      value = '(' + this.compileExpr(node.range) + ').map(' + fn + ')';
     } else if (node.node === 'attr') {
+      var attrName;
+      if (typeof node.name === 'string') {
+        attrName = escapeLiteral(node.name);
+      } else {
+        attrName = node.name.map(this.compileExpr, this).join(' + ');
+      }
       var attrValue = escapeLiteral(node.value);
-      value = '[' + escapeLiteral(node.name) + ', ' + attrValue + ']';
+      value = '[' + attrName + ', ' + attrValue + ']';
     } else if (node.node === 'comment') {
       // No way to render HTML comments using React :(
       // https://github.com/facebook/react/issues/2810
@@ -307,7 +325,7 @@ var Compiler = function () {
     var onlySimpleAttrs = true;
     if (node.attrs.length) {
       node.attrs.forEach(function (attr) {
-        if (attr.node !== 'attr') {
+        if (attr.node !== 'attr' || typeof attr.name !== 'string') {
           onlySimpleAttrs = false;
           return;
         }
@@ -318,9 +336,15 @@ var Compiler = function () {
         if (typeof attr.value === 'string') {
           value = escapeLiteral(attr.value);
         } else {
-          value = ('""' + (attr.value.length ?
-            ' + ' + attr.value.map(this.compileExpr, this).join(' + ') :
-            ''));
+          value = '""';
+          attr.value.forEach(function (valueNode) {
+            var expr = this.compileExpr(valueNode);
+            if (valueNode.node === 'for') {
+              value = value + ' + ' + expr + '.join("")';
+            } else {
+              value = value + ' + ' + expr;
+            }
+          }, this);
         }
         attrKV.push(escapeLiteral(name) + ': ' + value);
       }, this);
@@ -361,23 +385,31 @@ var Compiler = function () {
   this.compile = function (node) {
     return (
       '(function fn (ctx) {\n' +
-      '  return ' + this.compileExpr(node) + '\n})'
+      '  return ' + this.compileExpr(node) + ';\n})'
     );
   };
 };
 
 var Context = function () {
-  this.buildAttrs = function () {
-    var attrs = {};
-    Array.from(arguments).forEach(function (attr) {
+  this.collectAttrs = function (dest, src) {
+    src.forEach(function (attr) {
       if (attr) {
         var name = attr[0];
-        var value = attr[1];
-        if (name === 'class') { name = 'className'; }
-        if (name === 'for') { name = 'htmlFor'; }
-        attrs[name] = value;
+        if (Array.isArray(name)) {
+          this.collectAttrs(dest, attr);
+        } else {
+          var value = attr[1];
+          if (name === 'class') { name = 'className'; }
+          if (name === 'for') { name = 'htmlFor'; }
+          dest[name] = value;
+        }
       }
-    });
+    }, this);
+  };
+
+  this.buildAttrs = function () {
+    var attrs = {};
+    this.collectAttrs(attrs, Array.from(arguments));
     return attrs;
   };
 };
