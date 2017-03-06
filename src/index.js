@@ -52,6 +52,9 @@ var escapeLiteral = function (str) {
   return '"' + str + '"';
 };
 
+var CompileError = function (message) {
+  this.message = message;
+};
 
 var COW = '🐮';
 var PLACEHOLDER = '<!--' + COW + '-->';
@@ -72,6 +75,10 @@ Tokenizer.prototype.ATTRIBUTE_NAME_STATE = function (cp) {
     ATTRIBUTE_NAME_STATE.call(this, cp);
   }
 };
+// Also disable checking for duplicate attributes at the HTML-parsing stage.
+// eslint-disable-next-line no-underscore-dangle
+Tokenizer.prototype._isDuplicateAttr = function () { return false; };
+
 
 var TreeAdapter = function (tpltags) {
 
@@ -81,19 +88,32 @@ var TreeAdapter = function (tpltags) {
     for (var i = 0; i < length - 1; i = i + 1) {
       parts.splice((i * 2) + 1, 0, tpltags.shift());
     }
-    return parts.filter(function (part) {
-      return part !== '';
-    }).map(function (part) {
-      if (typeof part === 'string') {
-        part = {
-          node: 'string',
-          value: part
-        };
-      } else if (part.node === 'expression') {
-        part = part.body;
+    var tag;
+    var blocks = [[]];
+    parts.forEach(function (node) {
+      if (typeof node === 'string') {
+        if (node !== '') {
+          blocks[blocks.length - 1].push({
+            node: 'text',
+            value: node
+          });
+        }
+      } else if (node.node === 'if' || node.node === 'for') {
+        blocks[blocks.length - 1].push(node);
+        tag = node;
+        blocks.push(node.block);
+      } else if (node.node === 'elif' || node.node === 'else') {
+        tag.else = node;
+        tag = node;
+        blocks.pop(); blocks.push(node.block);
+      } else if (node.node === 'endif' || node.node === 'endfor') {
+        blocks.pop();
+        return;
+      } else if (node.node === 'expression') {
+        blocks[blocks.length - 1].push(node.body);
       }
-      return part;
     });
+    return blocks[0];
   };
 
   this.createDocumentFragment = function () {
@@ -106,22 +126,27 @@ var TreeAdapter = function (tpltags) {
   };
 
   this.createElement = function (tagName, namespaceURI, attrs) {
+    var tag;
     var blocks = [[]];
+    console.log(attrs);
     attrs.forEach(function (attr) {
       if (attr.name.startsWith(COW)) {
         var node = tpltags.shift();
         if (node.node === 'if' || node.node === 'for') {
           blocks[blocks.length - 1].push(node);
+          tag = node;
           blocks.push(node.block);
           return;
         } else if (node.node === 'elif' || node.node === 'else') {
-          var ifnode = blocks.pop();
-          ifnode.else = node;
-          blocks.push(node.block);
+          tag.else = node;
+          tag = node;
+          blocks.pop(); blocks.push(node.block);
+          return;
         } else if (node.node === 'endif' || node.node === 'endfor') {
           blocks.pop();
           return;
         }
+        throw new CompileError('Unexpected node type: ' + node.node);
       }
       attr.node = 'attr';
       if (attr.value.indexOf(PLACEHOLDER) !== -1) {
@@ -226,15 +251,11 @@ var TreeAdapter = function (tpltags) {
 var grammar = fs.readFileSync(path.join(__dirname, 'grammar.txt'), 'utf8');
 var cowParser = pegjs.generate(grammar);
 
-var CompileError = function (message) {
-  this.message = message;
-};
-
 var Compiler = function () {
 
   this.compileExpr = function (node, key) {
     var value = 'undefined';
-    if (node.node === 'string' || node.node === 'text') {
+    if (node.node === 'text') {
       value = escapeLiteral(node.value);
     } else if (node.node === 'element') {
       value = this.compileElement(node, key);
@@ -266,14 +287,9 @@ var Compiler = function () {
         '"" + ' + node.block.map(this.compileExpr, this).join(' + ') +
         '; }.bind(ctx)'
       );
-      value = '(' + this.compileExpr(node.range) + ').map(' + fn + ')';
+      value = '(' + this.compileExpr(node.range) + ').map(' + fn + ').join("")';
     } else if (node.node === 'attr') {
-      var attrValue = node.value;
-      if (typeof attrValue === 'string') {
-        attrValue = escapeLiteral(attrValue);
-      } else {
-        attrValue = attrValue.map(this.compileExpr, this).join(' + ');
-      }
+      var attrValue = escapeLiteral(node.value);
       value = '[' + escapeLiteral(node.name) + ', ' + attrValue + ']';
     } else if (node.node === 'comment') {
       // No way to render HTML comments using React :(
@@ -286,10 +302,6 @@ var Compiler = function () {
   };
 
   this.compileElement = function (node, key) {
-    // buildAttrs(
-    //   ["className": ()]
-    // );
-
     var attrs;
     var attrKV = [];
     var onlySimpleAttrs = true;
@@ -306,7 +318,9 @@ var Compiler = function () {
         if (typeof attr.value === 'string') {
           value = escapeLiteral(attr.value);
         } else {
-          value = '"" + ' + attr.value.map(this.compileExpr, this).join(' + ');
+          value = ('""' + (attr.value.length ?
+            ' + ' + attr.value.map(this.compileExpr, this).join(' + ') :
+            ''));
         }
         attrKV.push(escapeLiteral(name) + ': ' + value);
       }, this);

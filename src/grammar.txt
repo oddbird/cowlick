@@ -82,7 +82,7 @@ string
 dq_string
   = '"' value:([^"]+) '"' {
     return {
-      node: 'string',
+      node: 'text',
       value: value.join('')
     };
   }
@@ -90,7 +90,7 @@ dq_string
 sq_string
   = "'" value:([^']+) "'" {
     return {
-      node: 'string',
+      node: 'text',
       value: value.join('')
     };
   }

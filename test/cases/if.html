@@ -1,6 +1,6 @@
-{% if true %}true{% elif false %}false{% else %}other{% endif %}
-<div {% if true %}class="true"{% endif %}></div>
-<div class="{% if true %}true{% endif %}"></div>
+{% if false %}false{% elif true %}true{% else %}other{% endif %}
+<div {% if false %}class="false"{% elif true %}class="true"{% else %}class="other"{% endif %}></div>
+<div class="{% if false %}false{% elif true %}true{% else %}other{% endif %}"></div>
 ---
 true
 <div class="true"></div>
