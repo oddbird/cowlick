@@ -80,6 +80,26 @@ Tokenizer.prototype.ATTRIBUTE_NAME_STATE = function (cp) {
 Tokenizer.prototype._isDuplicateAttr = function () { return false; };
 
 
+var HTMLAttrToReactAttr = {};
+Object.keys(HTMLDOMPropertyConfig.DOMAttributeNames).forEach(
+  function (reactAttr) {
+    HTMLAttrToReactAttr[
+      HTMLDOMPropertyConfig.DOMAttributeNames[reactAttr]] = reactAttr;
+  }
+);
+
+var reactifyAttr = function (name, value) {
+  // make sure we give React a truthy value for boolean attributes
+  var props = HTMLDOMPropertyConfig.Properties[name];
+  // eslint-disable-next-line no-bitwise
+  if (props && (props & DOMProperty.injection.HAS_BOOLEAN_VALUE) &&
+      value === '') {
+    value = name;
+  }
+  name = HTMLAttrToReactAttr[name] || name;
+  return [ name, value ];
+};
+
 var TreeAdapter = function (tpltags) {
 
   this.uncowify = function (text, inAttrName, blocks) {
@@ -137,17 +157,6 @@ var TreeAdapter = function (tpltags) {
     };
   };
 
-  this.reactifyAttr = function (attr) {
-    // make sure we give React a truthy value for boolean attributes
-    var props = HTMLDOMPropertyConfig.Properties[attr.name];
-    // eslint-disable-next-line no-bitwise
-    if (props && (props & DOMProperty.injection.HAS_BOOLEAN_VALUE) &&
-        attr.value === '') {
-      attr.value = attr.name;
-    }
-    return attr;
-  };
-
   this.createElement = function (tagName, namespaceURI, attrs) {
     var blocks = [[]];
     attrs.forEach(function (attr) {
@@ -166,11 +175,13 @@ var TreeAdapter = function (tpltags) {
         name = newNodes;
       }
       if (name.length > 1) {
-        lastBlock.splice(newIndex, lastBlock.length, this.reactifyAttr({
+        var value = this.uncowifyAttrValue(attr.value);
+        var parts = reactifyAttr(name, value);
+        lastBlock.splice(newIndex, lastBlock.length, {
           node: 'attr',
-          name: name,
-          value: this.uncowifyAttrValue(attr.value)
-        }));
+          name: parts[0],
+          value: parts[1]
+        });
       }
     }, this);
     return {
@@ -329,10 +340,7 @@ var Compiler = function () {
           onlySimpleAttrs = false;
           return;
         }
-        var name = attr.name;
         var value;
-        if (name === 'class') { name = 'className'; }
-        if (name === 'for') { name = 'htmlFor'; }
         if (typeof attr.value === 'string') {
           value = escapeLiteral(attr.value);
         } else {
@@ -346,7 +354,8 @@ var Compiler = function () {
             }
           }, this);
         }
-        attrKV.push(escapeLiteral(name) + ': ' + value);
+        var parts = reactifyAttr(attr.name, value);
+        attrKV.push(escapeLiteral(parts[0]) + ': ' + parts[1]);
       }, this);
     }
     if (onlySimpleAttrs) {
@@ -360,9 +369,7 @@ var Compiler = function () {
       }
     } else {
       attrs = 'ctx.buildAttrs(';
-      if (key !== undefined) {
-        attrs = attrs + '["key", "' + key.toString() + '"], ';
-      }
+      attrs = attrs + '["key", "' + key.toString() + '"], ';
       attrs = attrs + node.attrs.map(this.compileExpr, this).join(', ') + ')';
     }
 
@@ -399,9 +406,8 @@ var Context = function () {
           this.collectAttrs(dest, attr);
         } else {
           var value = attr[1];
-          if (name === 'class') { name = 'className'; }
-          if (name === 'for') { name = 'htmlFor'; }
-          dest[name] = value;
+          var parts = reactifyAttr(name, value);
+          dest[parts[0]] = parts[1];
         }
       }
     }, this);
