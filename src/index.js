@@ -174,13 +174,11 @@ var TreeAdapter = function (tpltags) {
       } else {
         name = newNodes;
       }
-      if (name.length > 1) {
-        var value = this.uncowifyAttrValue(attr.value);
-        var parts = reactifyAttr(name, value);
+      if (newNodes.length) {
         lastBlock.splice(newIndex, lastBlock.length, {
           node: 'attr',
-          name: parts[0],
-          value: parts[1]
+          name: name,
+          value: this.uncowifyAttrValue(attr.value)
         });
       }
     }, this);
@@ -341,11 +339,14 @@ var Compiler = function () {
           return;
         }
         var value;
+        var parts = reactifyAttr(attr.name, attr.value);
+        var name = parts[0];
+        var attrValue = parts[1];
         if (typeof attr.value === 'string') {
-          value = escapeLiteral(attr.value);
+          value = escapeLiteral(attrValue);
         } else {
           value = '""';
-          attr.value.forEach(function (valueNode) {
+          attrValue.forEach(function (valueNode) {
             var expr = this.compileExpr(valueNode);
             if (valueNode.node === 'for') {
               value = value + ' + ' + expr + '.join("")';
@@ -354,8 +355,7 @@ var Compiler = function () {
             }
           }, this);
         }
-        var parts = reactifyAttr(attr.name, value);
-        attrKV.push(escapeLiteral(parts[0]) + ': ' + parts[1]);
+        attrKV.push(escapeLiteral(name) + ': ' + value);
       }, this);
     }
     if (onlySimpleAttrs) {
