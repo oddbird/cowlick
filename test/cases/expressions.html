@@ -3,9 +3,15 @@
 {{ 'single-quoted' }}
 {{ "double-quoted" }}
 {{ foo }}
+{{ address.city }}
+{{ address['state'] }}
 ---
 {
-	"foo": "bar"
+	"foo": "bar",
+	"address": {
+		"city": "Seattle",
+		"state": "WA"
+	}
 }
 ---
    
@@ -13,3 +19,5 @@
 single-quoted
 double-quoted
 bar
+Seattle
+WA

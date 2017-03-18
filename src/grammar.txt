@@ -63,7 +63,41 @@ expression_tag
   }
 
 expression
-  = literal / variable
+  = term:term operation:operation? {
+    if (operation) {
+      operation.base = term;
+      return operation;
+    } else {
+      return term;
+    }
+  }
+
+parenthesized_expression
+  = '(' ws? expression:expression ws? ')' {
+    return expression;
+  }
+
+term
+  = literal / variable / parenthesized_expression
+
+operation
+  = getattr / getitem
+
+getattr
+  = '.' name:identifier {
+    return {
+      node: 'getattr',
+      name: name
+    }
+  }
+
+getitem
+  = '[' name:expression ']' {
+    return {
+      node: 'getitem',
+      name: name
+    }
+  }
 
 literal
   = boolean / string / float

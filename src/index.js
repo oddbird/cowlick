@@ -285,6 +285,11 @@ var Compiler = function () {
     } else if (node.node === 'variable') {
       // @@@ error if not defined
       value = 'ctx["' + node.name + '"]';
+    } else if (node.node === 'getattr') {
+      value = this.compileExpr(node.base) + '.' + node.name;
+    } else if (node.node === 'getitem') {
+      value = (
+        this.compileExpr(node.base) + '[' + this.compileExpr(node.name) + ']');
     } else if (node.node === 'if' || node.node === 'elif') {
       value = (
         '(' + this.compileExpr(node.condition) + ' ? ' +
@@ -437,10 +442,11 @@ var Template = function (str, options) {
       cud = cowParser.parse(str.substring(pos));
       end = str.length;
     } catch (parseError) {
-      if (parseError.expected[0].type === 'end') {
+      if (parseError.expected && parseError.expected[0].type === 'end') {
         end = pos + parseError.location.end.offset - 1;
         cud = cowParser.parse(str.substring(pos, end));
       } else {
+        console.log(str.substring(pos));
         throw parseError;
       }
     }
