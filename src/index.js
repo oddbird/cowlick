@@ -132,6 +132,10 @@ var TreeAdapter = function (tpltags) {
         return;
       } else if (node.node === 'expression') {
         blocks[blocks.length - 1].push(node.body);
+      } else if (node.node === 'comment') {
+        // No-op
+      } else {
+        throw new CompileError(node.node + ' invalid in attributes.');
       }
     });
     return blocks;
@@ -208,7 +212,7 @@ var TreeAdapter = function (tpltags) {
       newNode.parent = parentNode;
       return;
     }
-    if (newNode.node === 'if' || newNode.node === 'for') {
+    if (newNode.node === 'if' || newNode.node === 'for' || newNode.node === 'macro') {
       parentNode.tplTag = newNode;
       parentNode.block = newNode.block;
       parentNode.children.push(newNode);
@@ -222,7 +226,7 @@ var TreeAdapter = function (tpltags) {
       // @@@ error if not in if or elif
       parentNode.tplTag.else = newNode;
       parentNode.block = newNode.block;
-    } else if (newNode.node === 'endif' || newNode.node === 'endfor') {
+    } else if (newNode.node === 'endif' || newNode.node === 'endfor' || newNode.node === 'endmacro') {
       // @@@ error if not in correct block
       parentNode.tplTag = parentNode.block = null;
     } else if (parentNode.block) {
@@ -446,7 +450,8 @@ var Template = function (str, options) {
         end = pos + parseError.location.end.offset - 1;
         cud = cowParser.parse(str.substring(pos, end));
       } else {
-        console.log(str.substring(pos));
+        console.log(pos);
+        console.log(parseError.location);
         throw parseError;
       }
     }

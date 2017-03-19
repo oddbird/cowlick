@@ -2,7 +2,7 @@ tag
   = statement_tag / expression_tag / comment_tag
 
 statement_tag
-  = '{%' ws? block:(if / elif / else / endif / for / endfor) ws? '%}' {
+  = '{%' ws? block:(if / elif / else / endif / for / endfor / macro / endmacro) ws? '%}' {
     return block;
   }
 
@@ -54,6 +54,36 @@ endfor
     };
   }
 
+macro
+  = 'macro' ws name:identifier ws? '(' ws? args:arglist? ws? ')' {
+    return {
+      node: 'macro',
+      name: name,
+      args: args,
+      block: []
+    };
+  }
+endmacro
+  = 'endmacro' {
+    return {
+      node: 'endmacro',
+    };
+  }
+arglist
+  = head:arg tail:(',' ws? arg:arg)* {
+    return [head].concat(tail.map(function (tail) {
+      return tail.arg;
+    }));
+  }
+arg
+  = splat:('**' / '*')? name:identifier default_val:(ws? '=' ws? default_val:literal)? {
+    return {
+      splat: splat,
+      name: name,
+      default: default_val ? default_val.default_val : undefined
+    };
+  }
+
 expression_tag
   = '{{' ws? expression:expression ws? '}}' {
     return {
@@ -63,7 +93,7 @@ expression_tag
   }
 
 expression
-  = term:term operation:operation? {
+  = term:term operation:postfix_operation? {
     if (operation) {
       operation.base = term;
       return operation;
@@ -80,8 +110,8 @@ parenthesized_expression
 term
   = literal / variable / parenthesized_expression
 
-operation
-  = getattr / getitem
+postfix_operation
+  = getattr / getitem / call
 
 getattr
   = '.' name:identifier {
@@ -97,6 +127,27 @@ getitem
       node: 'getitem',
       name: name
     }
+  }
+
+call
+  = '(' args:callargs ')' {
+    return {
+      node: 'call',
+      args: args
+    };
+  }
+callargs
+  = head:callarg tail:(',' ws? arg:callarg)* {
+    return [head].concat(tail.map(function (tail) {
+      return tail.arg;
+    }));
+  }
+callarg
+  = name:(identifier '=')? expression:expression {
+    return {
+      name: name,
+      value: expression
+    };
   }
 
 literal
