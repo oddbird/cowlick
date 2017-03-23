@@ -70,17 +70,16 @@ endmacro
     };
   }
 arglist
-  = head:arg tail:(',' ws? arg:arg)* {
+  = head:arg tail:(',' ws? arg)* {
     return [head].concat(tail.map(function (tail) {
-      return tail.arg;
+      return tail[2];
     }));
   }
 arg
-  = splat:('**' / '*')? name:identifier default_val:(ws? '=' ws? default_val:literal)? {
+  = name:identifier default_val:(ws? '=' ws? literal)? {
     return {
-      splat: splat,
       name: name,
-      default: default_val ? default_val.default_val : undefined
+      default: default_val ? default_val[3] : undefined
     };
   }
 
@@ -137,17 +136,16 @@ call
     };
   }
 callargs
-  = head:callarg tail:(',' ws? arg:callarg)* {
+  = head:callarg tail:(',' ws? callarg)* {
     return [head].concat(tail.map(function (tail) {
-      return tail.arg;
+      return tail[2];
     }));
   }
 callarg
   = name:(identifier '=')? expression:expression {
-    return {
-      name: name,
-      value: expression
-    };
+    var node = { value: expression };
+    if (name) node.name = name[0];
+    return node;
   }
 
 literal

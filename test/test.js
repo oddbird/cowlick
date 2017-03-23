@@ -71,4 +71,12 @@ describe('Template', function () {
       assert.equal(err.name, 'SyntaxError');
     }
   });
+
+  it('rejects some tags in attributes', function () {
+    try {
+      new cowlick.Template('<div {% macro foo() %}>').render();
+    } catch (err) {
+      assert.equal(err.message, 'macro invalid in attributes.');
+    }
+  });
 });

@@ -327,6 +327,44 @@ var Compiler = function () {
       }
       var attrValue = escapeLiteral(node.value);
       value = '[' + attrName + ', ' + attrValue + ']';
+    } else if (node.node === 'macro') {
+      value = 'ctx.set(' + escapeLiteral(node.name) + ', function() { ';
+      value = value + 'var namedargs = arguments[arguments.length - 1]; ';
+      value = value + 'var posargs = Array.from(arguments).slice(0, arguments.length - 1); '
+      value = value + 'var ctx = Object.create(this); ';
+      for (var i = 0; i < node.args.length; i = i + 1) {
+        var arg = node.args[i];
+        value = (
+          value + 'ctx[' + escapeLiteral(arg.name) +
+          '] = namedargs[' + escapeLiteral(arg.name) +
+          '] || posargs[' + i + ']'
+        );
+        if (arg.default) {
+          value = value + ' || ' + this.compileExpr(arg.default);
+        }
+        value = value + '; ';
+        // @@@ check arguments
+      }
+      value = (
+        value + 'return [' +
+        node.block.map(this.compileExpr, this).join(', ') +
+        ']; }.bind(ctx))');
+      return value;
+    } else if (node.node === 'call') {
+      value = this.compileExpr(node.base) + '(';
+      var posargs = [];
+      var namedargs = [];
+      node.args.forEach(function (arg) {
+        (arg.name ? namedargs : posargs).push(arg);
+      });
+      if (posargs.length) {
+        value = value + posargs.map(function (arg) {
+          return this.compileExpr(arg.value);
+        }, this).join(', ') + ', ';
+      }
+      value = value + '{' + namedargs.map(function (arg) {
+        return arg.name + ': ' + this.compileExpr(arg.value);
+      }, this).join(', ') + '})';
     } else if (node.node === 'comment') {
       // No way to render HTML comments using React :(
       // https://github.com/facebook/react/issues/2810
@@ -399,10 +437,10 @@ var Compiler = function () {
   };
 
   this.compile = function (node) {
-    return (
-      '(function fn (ctx) {\n' +
-      '  return ' + this.compileExpr(node) + ';\n})'
-    );
+    var out = '(function fn (ctx) {\n';
+    out += '  return ' + this.compileExpr(node) + ';';
+    out += '\n})';
+    return out;
   };
 };
 
@@ -426,6 +464,10 @@ var Context = function () {
     var attrs = {};
     this.collectAttrs(attrs, Array.from(arguments));
     return attrs;
+  };
+
+  this.set = function (name, value) {
+    this[name] = value;
   };
 };
 

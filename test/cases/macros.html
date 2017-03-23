@@ -1,0 +1,23 @@
+{% macro greet(name, greeting='Hello') %}
+<div>{{greeting}}, {{ name }}!</div>
+{% endmacro %}
+
+{{ greet('David') }}
+{{ greet(name='David') }}
+{{ greet('David', 'Hi')}}
+{{ greet('David', greeting='Hi') }}
+---
+
+
+
+<div>Hello, David!</div>
+
+
+<div>Hello, David!</div>
+
+
+<div>Hi, David!</div>
+
+
+<div>Hi, David!</div>
+
